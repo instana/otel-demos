@@ -1,0 +1,79 @@
+version: '3'
+services:
+
+  client-app:
+    build:
+      context: ./client-app
+    networks:
+      - openrestymesh
+    environment:
+      - target_url=http://openresty-gateway:8080/openresty-otel-demo
+
+  client-app-lua:
+    build:
+      context: ./client-app
+    networks:
+      - openrestymesh
+    environment:
+      - target_url=http://openresty-gateway:8080/lua-otel-demo
+
+  openresty:
+    build:
+      context: ./openresty
+    networks:
+      openrestymesh:
+        aliases:
+          - openresty-gateway
+    volumes:
+      - ./openresty/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
+    expose:
+      - "8080"
+
+  server-app:
+    build:
+      context: ./server-app
+    networks:
+      openrestymesh:
+        aliases:
+          - server-app
+    environment:  
+      - SERVER_PORT=8080
+    expose:
+      - "8080"
+
+  agent:
+    image: icr.io/instana/agent
+    pid: "host"
+    privileged: true
+    volumes:
+      - /var/run:/var/run
+      - /run:/run
+      # Include Agent config for OTel plugin and NGINX sensor config
+      - ./agent/configuration.yaml:/opt/instana/agent/etc/instana/configuration.yaml:ro
+      # Include Agent logging config (only NGINX sensor in debug logging - not for production)
+      - ./agent/org.ops4j.pax.logging.cfg:/opt/instana/agent/etc/org.ops4j.pax.logging.cfg:ro
+      # Include the File.cfg so spans are written to disk. We use them to verify which spans have been sent to the agent (not for production).
+      - ./agent/com.instana.agent.main.sender.File.cfg:/opt/instana/agent/etc/instana/com.instana.agent.main.sender.File.cfg:ro
+      # Mount the logs directly so we can directly access the span-*.log files to check the produced spans.
+      - ./agent/logs:/opt/instana/agent/data/log
+    networks:
+      openrestymesh:
+        aliases:
+          - instana-agent
+    environment:
+      - INSTANA_AGENT_ENDPOINT=${agent_endpoint:-ingress-red-saas.instana.io}
+      - INSTANA_AGENT_ENDPOINT_PORT=${agent_endpoint_port:-443}
+      - INSTANA_DOWNLOAD_KEY=${download_key}
+      - INSTANA_AGENT_KEY=${agent_key}
+      - INSTANA_AGENT_ZONE=${agent_zone:-openresty-otel-tracing-demo}
+    healthcheck:
+      test: ["CMD", "curl", "localhost:42699"]
+      interval: 8s
+      timeout: 10s
+      retries: 5
+    expose:
+      - "42699"
+      - "4317"
+
+networks:
+  openrestymesh: {}

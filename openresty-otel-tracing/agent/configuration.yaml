@@ -1,0 +1,15 @@
+# OpenTelemetry (https://www.ibm.com/docs/en/instana-observability/current?topic=tracing-opentelemetry)
+com.instana.plugin.opentelemetry:
+  enabled: true   # legacy setting, will only enable grpc, defaults to false
+  grpc:
+    enabled: true # takes precedence over legacy settings above, defaults to true if "grpc:" is present
+  http:
+    enabled: true # allows to enable http endpoints, defaults to true if "http:" is present
+
+
+# NGINX sensor - trigger monitoring event "resty_http_no_tracing" if lua-resty-http has no traceparent support
+com.instana.plugin.nginx:
+  openresty:
+    tracing:
+      enabled: true
+      check_resty_http: true

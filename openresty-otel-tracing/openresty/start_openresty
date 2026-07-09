@@ -1,0 +1,8 @@
+#!/bin/sh
+
+echo "RUNNING OPENRESTY VERSION CHECK"
+echo
+/usr/local/openresty/nginx/sbin/nginx -V
+echo
+
+exec /usr/local/openresty/bin/openresty -g "daemon off;"
