@@ -1,4 +1,4 @@
-FROM openresty/openresty:noble-amd64
+FROM openresty/openresty:1.31.1.1-noble-amd64
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN set -x \
