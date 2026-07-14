@@ -1,0 +1,169 @@
+# Manual a-priori configuration. Configuration will be only used when the sensor
+# is actually installed by the agent.
+# The commented out example values represent example configuration and are not
+# necessarily defaults. Defaults are usually 'absent' or mentioned separately.
+# Changes are hot reloaded unless otherwise mentioned.
+
+# It is possible to create files called 'configuration-abc.yaml' which are
+# merged with this file in file system order. So 'configuration-cde.yaml' comes
+# after 'configuration-abc.yaml'. Only nested structures are merged, values are
+# overwritten by subsequent configurations.
+
+# Secrets
+# To filter sensitive data from collection by the agent, all sensors respect
+# the following secrets configuration. If a key collected by a sensor matches
+# an entry from the list, the value is redacted.
+#com.instana.secrets:
+#  matcher: 'contains-ignore-case' # 'contains-ignore-case', 'contains', 'regex'
+#  list:
+#    - 'key'
+#    - 'password'
+#    - 'secret'
+
+# Host
+# Override the hostname so the agent registers the same host identity as the
+# OTel collector (INSTANA_HOST_NAME). Without this the agent uses its Docker
+# container hostname, which creates a second, separate infrastructure entity.
+com.instana.plugin.host:
+  name: '${env:INSTANA_AGENT_REPORTED_HOSTNAME}'
+
+# Hardware & Zone
+#com.instana.plugin.generic.hardware:
+#  enabled: true # disabled by default
+#  availability-zone: 'Datacenter A / Rack 42'
+
+# Apache Httpd
+# com.instana.plugin.httpd:
+#  user: ''
+#  password: ''
+#  tracing:
+#    # Enabling tracing will automatically download the HTTPd Tracing module and
+#    # load it in your Apache configuration file. You will need to manually restart
+#    # Apache HTTP Server unless you specify a restart script in notificationScript
+#    # or enable autoRestart. Disabling tracing will not remove the HTTPd Tracing module.
+#    # It will only remove the tracing module config from the Apache configuration file.
+#    enabled: false
+#    # Pins the HTTPd Tracing module to download and install to a specific version.
+#    # This can be used to rollback to previous versions of the module or to test
+#    # beta versions (when asked to do so). Expects the version to be given as
+#    # major.minor.patch format, e.g. 1.0.0
+#    pinModuleVersion: 1.1.0
+#    # The absolute path to the script to trigger whenever the sensor installed
+#    # a different version of the HTTPd Tracing module than is currently installed.
+#    # Works for upgrades and downgrades. Default is empty.
+#    notificationScript: /path/to/restart_apache.sh
+#    # Enabling auto-restart will let the sensor attempt a graceful restart of your
+#    # Apache HTTP Server to load the updated HTTPd Tracing module into memory.
+#    # If you specify a notificationScript, then the sensor will ignore autoRestart setting
+#    # unless the execution of.notificationScript failed.
+#    autoRestart: false
+
+# Custom processes
+# To enable low level metric and availability monitoring for not automatically
+# discovered processes, uncomment the com.instana.plugin.process section and
+# list all process names of processes that should be monitored.
+# Sometimes scripts or other jobs are started through the same command, but
+# only the execution of a single command should be monitored. In this case use
+# arguments to specify any argument that should cause a process to be monitored.
+#com.instana.plugin.process:
+#  processes:
+#    - 'sshd'
+#    - 'slapd'
+#  arguments:
+#    - '/opt/script.sh'
+
+# Memcached
+#com.instana.plugin.memcached:
+#  user: ''
+#  password: ''
+
+# MongoDB
+#com.instana.plugin.mongodb:
+#  user: ''
+#  source: '' # database where the user is defined
+#  password: ''
+
+# Mssql
+#com.instana.plugin.mssql:
+#  user: ''
+#  password: ''
+
+# Mysql
+#com.instana.plugin.mysql:
+#  user: ''
+#  password: ''
+
+# MariaDB
+#com.instana.plugin.mariadb:
+#  user: ''
+#  password: ''
+
+# PostgreSQL
+#com.instana.plugin.postgresql:
+#  user: ''
+#  password: ''
+
+# Redis
+#com.instana.plugin.redis:
+#  password: ''
+#  Instana requires the CONFIG command. If it was renamed using 'rename-command'
+#  this setting can be used to tell Instana the new name
+#  config-command: 'CONFIG'
+#  Monitor certain values in Redis
+#  monitor:
+#    - db: 0 # db number - defaults to 0 if absent
+#      key: 'logstash' # key of value, given as string
+#      type: 'list-length' # metric type. Currently only supports 'list-length'
+
+# RabbitMq
+#com.instana.plugin.rabbitmq:
+#  user: 'guest'
+#  password: 'guest'
+#  monitorQueues:
+#    - queue: queueName #name of the queue
+#      vhost: / #name of the vhost, default is '/'
+
+# OracleDB
+#com.instana.plugin.oracledb:
+#  password: ''
+#  user: '' #default is 'sys as sysdba'
+#  port: '' #default '1521'
+
+# Java & Custom JMX
+#com.instana.plugin.java:
+#  jmx:
+#    # JMX is NOT hot-reloaded and needs to be set before a JVM is discovered.
+#    # Supported attribute types are Number and Boolean
+#    # delta calculation is only supported for Number
+#    - object_name: 'java.lang:type=Compilation'
+#      metrics:
+#        - attributes: 'TotalCompilationTime'
+#          type: 'delta' # delta will report the change to the previous second
+#    - object_name: 'java.lang:type=ClassLoading'
+#      metrics:
+#        - attributes: 'LoadedClassCount'
+#          type: 'absolute' # absolute will report the value as-is
+
+# Java Tracing
+com.instana.plugin.javatrace:
+  instrumentation:
+    # Lightweight Bytecode Instrumentation, enabled by default
+    # Disabling currently requires an agent restart
+    enabled: true
+  # Inject W3C traceparent/tracestate in addition to Instana headers.
+  # This allows HAProxy's OTel filter (extract "-" use-headers) to read the
+  # parent trace context and create a child span rather than a new root span.
+  propagation:
+    - style: W3C
+    - style: INSTANA
+
+# PHP Tracing
+#com.instana.plugin.php:
+#  # Lightweight PHP Tracing. Requires the Instana Tracing extension. Enabled by default.
+#  tracing:
+#    # Enabling tracing will automatically download the Instana Tracing
+#    # extension and enable it in your php.ini. If you are using preforked
+#    # PHP workers, like PHP-FPM, you will need to restart them. Disabling
+#    # tracing again will not remove the extension. It will only disable the
+#    # tracing sensor.
+#    enabled: true

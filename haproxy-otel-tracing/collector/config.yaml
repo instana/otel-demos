@@ -1,0 +1,142 @@
+---
+# Instana idot collector config — based on the image's built-in default,
+# with otlp/receiver endpoint changed to 0.0.0.0:4317 so containers on
+# the Docker network can reach it.
+
+extensions:
+  health_check:
+    path: /health
+
+receivers:
+  otlp/receiver:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+  filelog:
+    include:
+      - /var/log/*.log
+    exclude:
+      - /var/log/falcond.log
+      - /var/log/falcon-sensor.log
+      - /var/log/falconctl.log
+      - /var/log/apport.log
+      - /var/log/auth.log
+      - /var/log/kern.log
+      - /var/log/cloud-init-output.log
+    include_file_path: true
+
+  hostmetrics:
+    collection_interval: 1m
+    scrapers:
+      processes:
+      cpu:
+      filesystem:
+      load:
+      memory:
+      network:
+      paging:
+      system:
+
+processors:
+  batch: {}
+  filter: {}
+  k8sattributes: {}
+  probabilistic_sampler: {}
+  # Applied to the collector's OWN telemetry pipelines (logs/collector, metrics/collector).
+  # Also stamps host.id so the collector's self-metrics are correlated to the same host.
+  # IMPORTANT: use ${env:INSTANA_HOST_ID} not ${file:/etc/machine-id} — the file
+  # provider reads the container's own /etc/machine-id (not the host's) and includes
+  # the trailing \n, producing "uuid\n" which the backend treats as an unknown host.
+  # INSTANA_HOST_ID is pre-computed on the host and stored in .env as a plain string.
+  resource/host:
+    attributes:
+      - action: upsert
+        key: service.name
+        value: otel-collector
+      - action: upsert
+        key: host.name
+        value: ${env:INSTANA_HOST_NAME:-hostname}
+      - action: upsert
+        key: host.id
+        value: ${env:INSTANA_HOST_ID}
+  # Applied to ALL HAProxy OTel pipelines (traces/otlp, logs/otlp, metrics/otlp).
+  # Stamps host.id + host.name WITHOUT overwriting service.name so the HAProxy
+  # service identity is preserved.
+  resource/host_identity:
+    attributes:
+      - action: upsert
+        key: host.id
+        value: ${env:INSTANA_HOST_ID}
+      - action: upsert
+        key: host.name
+        value: ${env:INSTANA_HOST_NAME:-hostname}
+  tail_sampling: {}
+  transform/severity_parse:
+    log_statements:
+      - context: log
+        statements:
+          - set(severity_text, "Info")  where IsMatch(body.string, ".*INFO.*")
+          - set(severity_text, "Warn")  where IsMatch(body.string, ".*WARN.*")
+          - set(severity_text, "Error") where IsMatch(body.string, ".*ERROR.*")
+          - set(severity_text, "Fatal") where IsMatch(body.string, ".*FATAL.*")
+
+exporters:
+  debug:
+    verbosity: ${env:OTEL_DEBUG_VERBOSITY:-none}
+
+  file/traces:
+    path: /collector/logs/traces.json
+    rotation:
+      max_megabytes: 10
+      max_backups: 3
+  file/logs:
+    path: /collector/logs/logs.json
+    rotation:
+      max_megabytes: 10
+      max_backups: 3
+  otlphttp/exporter:
+    endpoint: ${env:INSTANA_OTEL_ENDPOINT_HTTP:-localhost:4318}
+    headers:
+      x-instana-host: ${env:INSTANA_HOST_NAME:-hostname}
+      x-instana-key: ${env:INSTANA_KEY:-instanalocal}
+    tls:
+      insecure: false
+      insecure_skip_verify: true
+
+service:
+  extensions:
+    - health_check
+  pipelines:
+    traces/otlp:
+      receivers: [otlp/receiver]
+      processors: [resource/host_identity, batch]
+      exporters: [otlphttp/exporter, file/traces]
+    logs/otlp:
+      receivers: [otlp/receiver]
+      processors: [resource/host_identity, transform/severity_parse, batch]
+      exporters: [file/logs, debug]
+    metrics/otlp:
+      receivers: [otlp/receiver]
+      processors: [resource/host_identity, batch]
+      exporters: [otlphttp/exporter]
+    logs/collector:
+      receivers: [filelog]
+      processors: [resource/host, transform/severity_parse, batch]
+      exporters: [otlphttp/exporter]
+    metrics/collector:
+      receivers: [hostmetrics]
+      processors: [resource/host, batch]
+      exporters: [otlphttp/exporter]
+  telemetry:
+    logs:
+      level: ${env:INSTANA_OTEL_LOG_LEVEL:-info}
+      output_paths: ["stdout", "/collector/logs/collector.log"]
+      error_output_paths: ["stderr", "/collector/logs/collector.log"]
+    resource:
+      entity.type: host
+      host.name: ${env:INSTANA_HOST_NAME:-hostname}
+      log.level: ${env:INSTANA_OTEL_LOG_LEVEL:-info}
+      service.instance.id: ${env:INSTANA_HOST_NAME:-hostname}
+      service.name: otel-collector
+      service.version: ${env:INSTANA_OTEL_SERVICE_VERSION:-1.317.1}

@@ -1,0 +1,166 @@
+exporters:
+  exporter_traces_otlp_file:
+    type:           otlp_file
+    thread_name:    "OTLP/file trace"
+    file_pattern:   "__ctx_traces_log-%F-%N"
+    alias_pattern:  "__traces_log-latest"
+    flush_interval: 30000000
+    flush_count:    256
+    file_size:      134217728
+    rotate_size:    5
+
+  exporter_traces_otlp_grpc:
+    type:                             otlp_grpc
+    thread_name:                      "OTLP/gRPC trace"
+    endpoint:                         "http://instana-collector:4317/v1/traces"
+    use_ssl_credentials:              false
+
+
+  exporter_traces_dev_null:
+    type:     ostream
+    filename: /dev/null
+
+  exporter_traces_ostream:
+    type:     ostream
+    filename: __ctx_traces
+
+  exporter_traces_memory:
+    type:        memory
+    buffer_size: 256
+
+  exporter_metrics_otlp_file:
+    type:           otlp_file
+    thread_name:    "OTLP/file metr"
+    file_pattern:   "__ctx_metrics_log-%F-%N"
+    alias_pattern:  "__metrics_log-latest"
+    flush_interval: 30000000
+    flush_count:    256
+    file_size:      134217728
+    rotate_size:    5
+
+  exporter_metrics_otlp_grpc:
+    type:                otlp_grpc
+    thread_name:         "OTLP/gRPC metr"
+    endpoint:            "http://instana-collector:4317/v1/metrics"
+    use_ssl_credentials: false
+
+  exporter_metrics_dev_null:
+    type:     ostream
+    filename: /dev/null
+
+  exporter_metrics_ostream:
+    type:     ostream
+    filename: __ctx_metrics
+
+  exporter_metrics_memory:
+    type:        memory
+    buffer_size: 256
+
+  exporter_logs_otlp_file:
+    type:           otlp_file
+    thread_name:    "OTLP/file logs"
+    file_pattern:   "__ctx_logs_log-%F-%N"
+    alias_pattern:  "__logs_log-latest"
+    flush_interval: 30000000
+    flush_count:    256
+    file_size:      134217728
+    rotate_size:    5
+
+  exporter_logs_otlp_grpc:
+    type:                otlp_grpc
+    thread_name:         "OTLP/gRPC logs"
+    endpoint:            "http://instana-collector:4317/v1/logs"
+    use_ssl_credentials: false
+
+  exporter_logs_dev_null:
+    type:     ostream
+    filename: /dev/null
+
+  exporter_logs_ostream:
+    type:     ostream
+    filename: __ctx_logs
+
+readers:
+  reader_metrics:
+    thread_name:     "reader metr"
+    export_interval: 10000
+    export_timeout:  5000
+
+samplers:
+  sampler_traces:
+#   type:  always_on
+#   type:  always_off
+#   type:  trace_id_ratio_based
+#   ratio: 1.0
+    type:     parent_based
+    delegate: always_on
+
+processors:
+  processor_traces_batch:
+    type:                  batch
+    thread_name:           "proc/batch trac"
+    # Note: when the queue is half full, a preemptive notification is sent
+    # to start the export call.
+    max_queue_size:        2048
+    # Time interval (in ms) between two consecutive exports
+    schedule_delay:        5000
+    # Export 'max_export_batch_size' after every `schedule_delay' milliseconds.
+    max_export_batch_size: 512
+
+  processor_traces_single:
+    type:                  single
+
+  processor_logs_batch:
+    type:                  batch
+    thread_name:           "proc/batch logs"
+    max_queue_size:        2048
+    schedule_delay:        5000
+    max_export_batch_size: 512
+
+  processor_logs_single:
+    type:                  single
+
+providers:
+  provider_traces:
+    resources:
+      - service.version:     "1.0.0"
+      - service.instance.id: "${INSTANA_HOST_NAME}-proxy"
+      - service.name:        "haproxy-front-proxy"
+      - service.namespace:   "HAProxy traces test"
+      - host.name:           "${INSTANA_HOST_NAME}"
+
+  provider_metrics:
+    resources:
+      - service.version:     "1.0.0"
+      - service.instance.id: "${INSTANA_HOST_NAME}-proxy"
+      - service.name:        "haproxy-front-proxy"
+      - service.namespace:   "HAProxy metrics test"
+      - host.name:           "${INSTANA_HOST_NAME}"
+
+  provider_logs:
+    resources:
+      - service.version:     "1.0.0"
+      - service.instance.id: "${INSTANA_HOST_NAME}-proxy"
+      - service.name:        "haproxy-front-proxy"
+      - service.namespace:   "HAProxy logs test"
+      - host.name:           "${INSTANA_HOST_NAME}"
+
+signals:
+  traces:
+    scope_name: "HAProxy OTEL - traces"
+    exporters:  exporter_traces_otlp_grpc
+    samplers:   sampler_traces
+    processors: processor_traces_batch
+    providers:  provider_traces
+
+  metrics:
+    scope_name: "HAProxy OTEL - metrics"
+    exporters:  exporter_metrics_otlp_grpc
+    readers:    reader_metrics
+    providers:  provider_metrics
+
+  logs:
+    scope_name: "HAProxy OTEL - logs"
+    exporters:  exporter_logs_otlp_grpc
+    processors: processor_logs_batch
+    providers:  provider_logs

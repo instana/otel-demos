@@ -1,0 +1,111 @@
+# version: '3'
+services:
+
+  client-app:
+    build:
+      context: ./client-app
+    networks:
+      - haproxymesh
+    environment:
+      - target_url=http://haproxy:10080
+      - INSTANA_AGENT_HOST=instana-agent
+      - INSTANA_AGENT_PORT=42699
+
+  haproxy:
+    image: icr.io/instana-int/int-docker-ci-utility-images-local/haproxy:3.5-otel.v1
+    pid: "host"
+    entrypoint: ["/bin/sh", "/usr/local/etc/haproxy/docker-entrypoint.sh"]
+    command: ["/usr/local/sbin/haproxy", "-W", "-f", "/usr/local/etc/haproxy/haproxy.cfg"]
+    environment:
+      - INSTANA_HOST_NAME=${INSTANA_HOST_NAME}
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./haproxy/otel.cfg:/usr/local/etc/haproxy/otel.cfg:ro
+      - ./haproxy/otel.yml.template:/usr/local/etc/haproxy/otel.yml.template:ro
+      - ./haproxy/docker-entrypoint.sh:/usr/local/etc/haproxy/docker-entrypoint.sh:ro
+      - ./haproxy/logs:/var/log/haproxy
+    networks:
+      haproxymesh:
+        aliases:
+            - haproxy
+    expose:
+      - "10080"
+
+  server-app:
+    build:
+      context: ./server-app
+    networks:
+      haproxymesh:
+        aliases:
+          - server-app
+    environment:
+      - SERVER_PORT=8080
+      - INSTANA_AGENT_HOST=instana-agent
+      - INSTANA_AGENT_PORT=42699
+    expose:
+      - "8080"
+
+  agent:
+    image: icr.io/instana/agent
+    pid: "host"
+    privileged: true
+    volumes:
+      - /var/run:/var/run
+      - /run:/run
+      # Instana agent configuration.
+      - ./agent/configuration.yaml:/opt/instana/agent/etc/instana/configuration.yaml:ro
+      # Include the File.cfg so spans are written to disk. We use them to verify which spans have been sent to the agent.
+      - ./agent/com.instana.agent.main.sender.File.cfg:/opt/instana/agent/etc/instana/com.instana.agent.main.sender.File.cfg:ro
+      # Mount the logs directly so we can directly access the span-*.log files to check the produced spans.
+      - ./agent/logs:/opt/instana/agent/data/log
+    networks:
+      haproxymesh:
+        aliases:
+          - instana-agent
+    environment:
+      - INSTANA_AGENT_ENDPOINT=${agent_endpoint:-ingress-red-saas.instana.io}
+      - INSTANA_AGENT_ENDPOINT_PORT=${agent_endpoint_port:-443}
+      - INSTANA_DOWNLOAD_KEY=${download_key}
+      - INSTANA_AGENT_KEY=${agent_key}
+      - INSTANA_AGENT_ZONE=${agent_zone:-haproxy-tracing-demo}
+      # Make the agent report the same hostname as the OTel collector so both
+      # data sources are merged into a single infrastructure entity in Instana.
+      - INSTANA_AGENT_REPORTED_HOSTNAME=${INSTANA_HOST_NAME}
+    healthcheck:
+      test: ["CMD", "curl", "localhost:42699"]
+      interval: 8s
+      timeout: 10s
+      retries: 5
+    expose:
+      - "42699"
+
+  collector:
+    image: icr.io/instana/idot:latest
+    user: "0"
+    entrypoint: ["/instana-otelcol"]
+    command: ["--config", "/etc/instana-otelcol/config.yaml"]
+    volumes:
+      - ./collector/config.yaml:/etc/instana-otelcol/config.yaml:ro
+      - /var/log:/var/log:ro
+      - ./collector/logs:/collector/logs
+      # Expose the host machine-id so the collector can stamp spans with host.id,
+      # which the Instana backend uses to correlate OTel entities with the
+      # agent-managed host (the agent also reads /etc/machine-id via pid:host).
+      - /etc/machine-id:/etc/machine-id:ro
+    networks:
+      haproxymesh:
+        aliases:
+          - instana-collector
+    expose:
+      - "4317"
+    environment:
+      - INSTANA_OTEL_SERVICE_VERSION=${INSTANA_OTEL_SERVICE_VERSION}
+      - INSTANA_OTEL_ENDPOINT_HTTP=${INSTANA_OTEL_ENDPOINT_HTTP}
+      - INSTANA_KEY=${agent_key}
+      - INSTANA_HOST_NAME=${INSTANA_HOST_NAME}
+      - INSTANA_OTEL_LOG_LEVEL=${INSTANA_OTEL_LOG_LEVEL}
+      - OTEL_DEBUG_VERBOSITY=${OTEL_DEBUG_VERBOSITY}
+      - INSTANA_HOST_ID=${INSTANA_HOST_ID}
+
+networks:
+  haproxymesh: {}
