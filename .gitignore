@@ -1,0 +1,6 @@
+# Secret environment files
+**/.env
+
+# HAProxy log output
+haproxy-otel-tracing/haproxy/logs/*
+!haproxy-otel-tracing/haproxy/logs/.gitkeep
