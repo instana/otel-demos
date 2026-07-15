@@ -10,7 +10,7 @@ using the native Java instrumentation.
 
 ## Prerequisites
 
-A `docker-compose` installation running on your machine.
+[Docker](https://docs.docker.com/get-docker/) and [docker-compose](https://docs.docker.com/compose/install/) installed and running on your machine.
 
 ## Configure
 
