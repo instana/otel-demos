@@ -1,0 +1,274 @@
+---
+# haproxy.cfg — main proxy configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: haproxy-cfg
+  namespace: haproxy-otel
+  labels:
+    app: haproxy
+data:
+  haproxy.cfg: |
+    global
+    #   nbthread 1
+        maxconn 5000
+        hard-stop-after 10s
+        log stdout format raw local0 debug
+        stats socket /tmp/haproxy.sock mode 666 level admin
+        pidfile /var/run/haproxy.pid
+
+    defaults
+        log     global
+        option  httplog
+        option  dontlognull
+    #   option  httpclose
+        mode    http
+        retries 3
+        maxconn 4000
+        timeout connect 5000
+        timeout client  50000
+        timeout server  50000
+
+    listen stats
+        mode http
+        bind *:8001
+        stats uri /
+        stats admin if TRUE
+        stats refresh 10s
+
+    frontend otel-test-frontend
+        bind *:10080
+        default_backend servers-backend
+
+        # ACL used to distinguish successful from error responses (kept for reference)
+        # acl acl-http-status-ok status 100:399
+
+        # OTel filter with simplified single-span context propagation
+        # Span creation and finishing is handled by otel-event triggers in otel.cfg
+        filter opentelemetry id otel-tracing-test config /usr/local/etc/haproxy/otel.cfg
+
+        # Strip all Instana and W3C propagation headers that carry the client-app's
+        # span context. The OTel inject has already written a new traceparent with
+        # HAProxy's own spanId. By removing X-INSTANA-T, X-INSTANA-S and tracestate
+        # the Instana Java agent on server-app is forced to read traceparent only,
+        # which correctly names HAProxy's span as the parent.
+        http-request del-header X-INSTANA-T
+        http-request del-header X-INSTANA-S
+        http-request del-header tracestate
+
+        # DISABLED: Group-based triggers - using event-based triggers in otel.cfg instead
+        # http-response otel-group otel-simple-ctx http_response_group if acl-http-status-ok
+        # http-after-response otel-group otel-simple-ctx http_after_response_group if !acl-http-status-ok
+
+    backend servers-backend
+        # Backend server
+        server server-1 server-app:8080 resolvers docker init-addr none
+
+    resolvers docker
+        nameserver dns1 127.0.0.11:53
+        resolve_retries 3
+        timeout resolve 1s
+        timeout retry   1s
+        hold other      10s
+        hold refused    10s
+        hold nx         10s
+        hold timeout    10s
+        hold valid      10s
+        hold obsolete   10s
+
+---
+# otel.cfg — OpenTelemetry filter configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: haproxy-otel-cfg
+  namespace: haproxy-otel
+  labels:
+    app: haproxy
+data:
+  otel.cfg: |
+    [otel-tracing-test]
+        otel-instrumentation otel-test-instrumentation
+            debug-level 0x77f
+            log localhost:514 local7 debug
+            config /usr/local/etc/haproxy/otel.yml
+            option dontlog-normal
+            option hard-errors
+            no option disabled
+            rate-limit 100.0
+            
+            # Declare scopes to use
+            scopes request_scope response_scope
+
+        # Request scope - creates the span with context propagation
+        otel-scope request_scope
+            # Extract incoming trace context from client request headers
+            # If headers are absent/invalid, extraction yields empty context
+            extract "-" use-headers
+
+            # Create span:
+            # - child span if client context exists (continues the trace)
+            # - root span if no context (starts a new trace)
+            span "HAProxy-request" parent "-" root
+                # Request attributes
+                attribute "client.ip" src
+                attribute "frontend.name" fe_name
+                # attribute "server.name" srv_name
+                attribute "http.method" method
+                attribute "http.target" path
+                attribute "http.host" req.hdr("host")
+                
+                # Inject HAProxy's OWN span context into backend request headers
+                # This makes the HAProxy span the parent of server-app spans
+                inject "-" use-headers use-vars
+
+            # Metrics: count every incoming HTTP request.
+            # instrument directives are what actually produce metric data points —
+            # without at least one instrument per scope, nothing is exported.
+            instrument cnt_int "haproxy.http.requests" desc "HTTP requests received" value int(1) unit "{request}"
+
+            # Trigger on request
+            otel-event on-frontend-http-request
+
+
+        # Response scope - finishes the span and adds response attributes
+        otel-scope response_scope
+            span "HAProxy-request"
+                # Response attributes
+                attribute "http.status_code" status
+                attribute "backend.name" be_name
+
+            # Metrics: count responses and flush the request counter
+            instrument cnt_int "haproxy.http.responses" desc "HTTP responses sent" value int(1) unit "{response}"
+            instrument update "haproxy.http.requests"
+            instrument update "haproxy.http.responses"
+
+            # Finish span
+            finish "HAProxy-request"
+
+            # Emit an OTel log record for every HTTP response
+            # (only fetches available at on-http-response: fe_name, be_name, status)
+            log-record info id 1 event "http-response" span "HAProxy-request" fe_name be_name status
+
+            # Trigger on response
+            otel-event on-http-response
+
+---
+# otel.yml.template — HAProxy OTel SDK exporter/signal config
+# Rendered at pod startup via envsubst (INSTANA_HOST_NAME substituted)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: haproxy-otel-yml-template
+  namespace: haproxy-otel
+  labels:
+    app: haproxy
+data:
+  otel.yml.template: |
+    exporters:
+      exporter_traces_otlp_grpc:
+        type:                otlp_grpc
+        thread_name:         "OTLP/gRPC trace"
+        endpoint:            "http://instana-collector:4317/v1/traces"
+        use_ssl_credentials: false
+
+      exporter_metrics_otlp_grpc:
+        type:                otlp_grpc
+        thread_name:         "OTLP/gRPC metr"
+        endpoint:            "http://instana-collector:4317/v1/metrics"
+        use_ssl_credentials: false
+
+      exporter_logs_otlp_grpc:
+        type:                otlp_grpc
+        thread_name:         "OTLP/gRPC logs"
+        endpoint:            "http://instana-collector:4317/v1/logs"
+        use_ssl_credentials: false
+
+    readers:
+      reader_metrics:
+        thread_name:     "reader metr"
+        export_interval: 10000
+        export_timeout:  5000
+
+    samplers:
+      sampler_traces:
+        type:     parent_based
+        delegate: always_on
+
+    processors:
+      processor_traces_batch:
+        type:                  batch
+        thread_name:           "proc/batch trac"
+        max_queue_size:        2048
+        schedule_delay:        5000
+        max_export_batch_size: 512
+
+      processor_logs_batch:
+        type:                  batch
+        thread_name:           "proc/batch logs"
+        max_queue_size:        2048
+        schedule_delay:        5000
+        max_export_batch_size: 512
+
+    providers:
+      provider_traces:
+        resources:
+          - service.version:     "1.0.0"
+          - service.instance.id: "${INSTANA_HOST_NAME}-proxy"
+          - service.name:        "haproxy-front-proxy"
+          - service.namespace:   "HAProxy traces test"
+          - host.name:           "${INSTANA_HOST_NAME}"
+
+      provider_metrics:
+        resources:
+          - service.version:     "1.0.0"
+          - service.instance.id: "${INSTANA_HOST_NAME}-proxy"
+          - service.name:        "haproxy-front-proxy"
+          - service.namespace:   "HAProxy metrics test"
+          - host.name:           "${INSTANA_HOST_NAME}"
+
+      provider_logs:
+        resources:
+          - service.version:     "1.0.0"
+          - service.instance.id: "${INSTANA_HOST_NAME}-proxy"
+          - service.name:        "haproxy-front-proxy"
+          - service.namespace:   "HAProxy logs test"
+          - host.name:           "${INSTANA_HOST_NAME}"
+
+    signals:
+      traces:
+        scope_name: "HAProxy OTEL - traces"
+        exporters:  exporter_traces_otlp_grpc
+        samplers:   sampler_traces
+        processors: processor_traces_batch
+        providers:  provider_traces
+
+      metrics:
+        scope_name: "HAProxy OTEL - metrics"
+        exporters:  exporter_metrics_otlp_grpc
+        readers:    reader_metrics
+        providers:  provider_metrics
+
+      logs:
+        scope_name: "HAProxy OTEL - logs"
+        exporters:  exporter_logs_otlp_grpc
+        processors: processor_logs_batch
+        providers:  provider_logs
+
+---
+# docker-entrypoint.sh — renders otel.yml from template at pod startup
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: haproxy-entrypoint
+  namespace: haproxy-otel
+  labels:
+    app: haproxy
+data:
+  docker-entrypoint.sh: |
+    #!/bin/sh
+    set -e
+    envsubst '${INSTANA_HOST_NAME}' \
+      < /usr/local/etc/haproxy/otel.yml.template \
+      > /usr/local/etc/haproxy/otel.yml
+    exec "$@"

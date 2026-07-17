@@ -1,0 +1,133 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: haproxy
+  namespace: haproxy-otel
+  labels:
+    app: haproxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:  
+      app: haproxy
+  template:
+    metadata:
+      labels:
+        app: haproxy
+    spec:
+      # OCP: no special SCC needed — haproxy image runs as non-root by default
+      # If the image requires root, add: securityContext: runAsUser: 0
+      initContainers:
+        # Copies the entrypoint script from the ConfigMap into an emptyDir
+        # and makes it executable, working around read-only ConfigMap mounts.
+        - name: copy-entrypoint
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              cp /scripts/docker-entrypoint.sh /entrypoint/docker-entrypoint.sh
+              chmod +x /entrypoint/docker-entrypoint.sh
+          volumeMounts:
+            - name: entrypoint-script
+              mountPath: /scripts
+            - name: entrypoint-writable
+              mountPath: /entrypoint
+      containers:
+        - name: haproxy
+          image: icr.io/instana-int/int-docker-ci-utility-images-local/haproxy:3.5-otel.v1
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/entrypoint/docker-entrypoint.sh"]
+          args:  ["/usr/local/sbin/haproxy", "-W", "-f", "/usr/local/etc/haproxy/haproxy.cfg"]
+          env:
+            - name: INSTANA_HOST_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: instana-credentials
+                  key: INSTANA_HOST_NAME
+          ports:
+            - name: proxy
+              containerPort: 10080
+              protocol: TCP
+            - name: stats
+              containerPort: 8001
+              protocol: TCP
+          volumeMounts:
+            - name: haproxy-cfg
+              mountPath: /usr/local/etc/haproxy/haproxy.cfg
+              subPath: haproxy.cfg
+              readOnly: true
+            - name: haproxy-otel-cfg
+              mountPath: /usr/local/etc/haproxy/otel.cfg
+              subPath: otel.cfg
+              readOnly: true
+            - name: haproxy-otel-yml-template
+              mountPath: /usr/local/etc/haproxy/otel.yml.template
+              subPath: otel.yml.template
+              readOnly: true
+            # Writable dir for rendered otel.yml (produced by entrypoint envsubst)
+            - name: haproxy-otel-yml-rendered
+              mountPath: /usr/local/etc/haproxy
+            - name: entrypoint-writable
+              mountPath: /entrypoint
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: stats
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /
+              port: stats
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: haproxy-cfg
+          configMap:
+            name: haproxy-cfg
+        - name: haproxy-otel-cfg
+          configMap:
+            name: haproxy-otel-cfg
+        - name: haproxy-otel-yml-template
+          configMap:
+            name: haproxy-otel-yml-template
+        # emptyDir used as writable /usr/local/etc/haproxy so that
+        # the entrypoint can write otel.yml alongside the read-only mounts
+        - name: haproxy-otel-yml-rendered
+          emptyDir: {}
+        - name: entrypoint-script
+          configMap:
+            name: haproxy-entrypoint
+        - name: entrypoint-writable
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: haproxy
+  namespace: haproxy-otel
+  labels:
+    app: haproxy
+spec:
+  selector:
+    app: haproxy
+  ports:
+    - name: proxy
+      port: 10080
+      targetPort: proxy
+      protocol: TCP
+    - name: stats
+      port: 8001
+      targetPort: stats
+      protocol: TCP
+  type: ClusterIP

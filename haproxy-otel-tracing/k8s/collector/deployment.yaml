@@ -1,0 +1,111 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: instana-collector
+  namespace: haproxy-otel
+  labels:
+    app: instana-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: instana-collector
+  template:
+    metadata:
+      labels:
+        app: instana-collector
+    spec:
+      # OCP note: the idot image writes to /collector/logs.
+      # If the default SCC blocks this, add an emptyDir for that path (see volumes).
+      containers:
+        - name: collector
+          image: icr.io/instana/idot:latest
+          imagePullPolicy: Always
+          command: ["/instana-otelcol"]
+          args:  ["--config", "/etc/instana-otelcol/config.yaml"]
+          env:
+            - name: INSTANA_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: instana-credentials
+                  key: INSTANA_KEY
+            - name: INSTANA_OTEL_ENDPOINT_HTTP
+              valueFrom:
+                secretKeyRef:
+                  name: instana-credentials
+                  key: INSTANA_OTEL_ENDPOINT_HTTP
+            - name: INSTANA_HOST_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: instana-credentials
+                  key: INSTANA_HOST_NAME
+            - name: INSTANA_OTEL_SERVICE_VERSION
+              valueFrom:
+                secretKeyRef:
+                  name: instana-credentials
+                  key: INSTANA_OTEL_SERVICE_VERSION
+            - name: INSTANA_OTEL_LOG_LEVEL
+              valueFrom:
+                secretKeyRef:
+                  name: instana-credentials
+                  key: INSTANA_OTEL_LOG_LEVEL
+            - name: OTEL_DEBUG_VERBOSITY
+              valueFrom:
+                secretKeyRef:
+                  name: instana-credentials
+                  key: OTEL_DEBUG_VERBOSITY
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+              protocol: TCP
+          volumeMounts:
+            - name: collector-cfg
+              mountPath: /etc/instana-otelcol/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            - name: collector-logs
+              mountPath: /collector/logs
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 13133
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 13133
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: collector-cfg
+          configMap:
+            name: collector-cfg
+        - name: collector-logs
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: instana-collector
+  namespace: haproxy-otel
+  labels:
+    app: instana-collector
+spec:
+  selector:
+    app: instana-collector
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+      protocol: TCP
+  type: ClusterIP
