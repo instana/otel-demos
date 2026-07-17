@@ -24,7 +24,7 @@ agent_zone=<name of the zone for the agent; default: haproxy-tracing-demo>
 agent_endpoint=<local ip or remote host; e.g. ingress-red-saas.instana.io>
 agent_endpoint_port=<443 already set as default; or 4443 for local>
 
-INSTANA_OTEL_ENDPOINT_HTTP=<OTLP HTTP ingest URL; 
+INSTANA_OTEL_ENDPOINT_HTTP=<Instana OTLP HTTP endpoint>; https://<unit>.instana.io:443
 INSTANA_HOST_NAME=<hostname used to correlate agent and collector entities>
 INSTANA_HOST_ID=<host machine-id, used to stamp OTel spans with host.id>
 ```

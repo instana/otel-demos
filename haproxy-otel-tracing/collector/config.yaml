@@ -96,10 +96,10 @@ exporters:
       max_megabytes: 10
       max_backups: 3
   otlphttp/exporter:
-    endpoint: ${env:INSTANA_OTEL_ENDPOINT_HTTP:-localhost:4318}
+    endpoint: ${env:INSTANA_OTEL_ENDPOINT_HTTP:-http://instana-agent:4318}
     headers:
-      x-instana-host: ${env:INSTANA_HOST_NAME:-hostname}
-      x-instana-key: ${env:INSTANA_KEY:-instanalocal}
+      x-instana-host: ${env:INSTANA_HOST_NAME}
+      x-instana-key: ${env:INSTANA_KEY}
     tls:
       insecure: false
       insecure_skip_verify: true
