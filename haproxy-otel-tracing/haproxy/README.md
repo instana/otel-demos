@@ -117,9 +117,6 @@ All three signal types (traces, metrics, logs) define four exporter variants eac
 | Exporter | Transport | Destination |
 |---|---|---|
 | `otlp_grpc` | gRPC/OTLP | `instana-collector:4317` (active signal exporter) |
-| `otlp_file` | File (rotating) | Pattern `__ctx_<signal>_log-%F-%N` |
-| `ostream` | stdout stream | `__ctx_<signal>` |
-| `memory` | In-memory buffer | 256-entry ring buffer |
 
 The **active exporter** for all three signals is `otlp_grpc`, pointing to the Instana collector container.
 
