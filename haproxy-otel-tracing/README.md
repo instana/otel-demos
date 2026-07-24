@@ -25,12 +25,15 @@ agent_endpoint=<local ip or remote host; e.g. ingress-red-saas.instana.io>
 agent_endpoint_port=<443 already set as default; or 4443 for local>
 
 INSTANA_OTEL_ENDPOINT_HTTP=<Instana OTLP HTTP endpoint>; https://<unit>.instana.io:443
-INSTANA_HOST_NAME=<hostname used to correlate agent and collector entities>
+INSTANA_HOST_NAME=<hostname used to identify collector entities>
 INSTANA_HOST_ID=<host machine-id, used to stamp OTel spans with host.id>
 ```
+The host's `/etc/machine-id` file is bind-mounted (read-only) into the OTel collector container:
 
-In most scenarios only `agent_key`, `agent_endpoint`, `INSTANA_KEY`, and
-`INSTANA_OTEL_ENDPOINT_HTTP` are required.
+```yaml
+/etc/machine-id:/etc/machine-id:ro
+```
+The Instana agent is also configured with `pid: "host"` and `privileged: true` in `docker-compose.yml`, which allows it to read the same `/etc/machine-id` directly and report the identical `host.id`. The Instana backend therefore receives the same `host.id` from both the OTel collector and the agent, confirming they are running on the same host.
 
 ## Build & Launch
 
