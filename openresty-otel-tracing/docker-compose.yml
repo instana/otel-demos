@@ -20,6 +20,10 @@ services:
   openresty:
     build:
       context: ./openresty
+      args:
+        download_key: ${download_key}
+        agent_key: ${agent_key}
+        openresty_version: '1.31.1.1'
     networks:
       openrestymesh:
         aliases:
