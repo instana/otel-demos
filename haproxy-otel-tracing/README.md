@@ -54,6 +54,14 @@ This will build and launch the following components:
 - `collector` — the **Instana idot OTel collector** (`icr.io/instana/idot`) that receives
   HAProxy spans over gRPC OTLP and forwards them to the Instana backend via OTLP HTTP.
 
+## Viewing in Instana
+
+Once the stack is running and traces are flowing, you can locate the HAProxy service in the Instana UI in three places:
+
+- **Applications** — open the *Applications* and search for the service name **`haproxy-front-proxy`** to see HAProxy spans and end-to-end traces.
+- **Analytics** — use the *Analytics* trace/span search and filter by `service.name = haproxy-front-proxy` to query individual spans.
+- **Infrastructure** — navigate to *Infrastructure* and filter by zone using the `agent_zone` value configured in the `.env` file (default: `haproxy-tracing-demo`) to find the host where the Instana agent is running.
+
 ## Trace Flow
 
 ```
