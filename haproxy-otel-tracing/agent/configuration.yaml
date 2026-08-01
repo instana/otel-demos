@@ -27,6 +27,13 @@
 com.instana.plugin.host:
   name: '${env:INSTANA_AGENT_REPORTED_HOSTNAME}'
 
+# HAProxy
+# Disable the built-in HAProxy sensor so that the agent does not auto-discover
+# or collect HAProxy metrics. All HAProxy metrics are collected by the OTel
+# collector and forwarded via OTLP, so duplicate collection must be avoided.
+com.instana.plugin.haproxy:
+  enabled: false
+
 # Hardware & Zone
 #com.instana.plugin.generic.hardware:
 #  enabled: true # disabled by default
