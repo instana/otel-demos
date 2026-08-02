@@ -1,0 +1,94 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: collector-cfg
+  namespace: haproxy-otel
+  labels:
+    app: instana-collector
+data:
+  config.yaml: |
+    ---
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+        path: /health
+
+    receivers:
+      otlp/receiver:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+
+    processors:
+      batch: {}
+      filter: {}
+      k8sattributes: {}
+      resource/host:
+        attributes:
+          - action: upsert
+            key: service.name
+            value: otel-collector
+          - action: upsert
+            key: host.name
+            value: ${env:INSTANA_HOST_NAME}
+      transform/severity_parse:
+        log_statements:
+          - context: log
+            statements:
+              - set(severity_text, "Info")  where IsMatch(body.string, ".*INFO.*")
+              - set(severity_text, "Warn")  where IsMatch(body.string, ".*WARN.*")
+              - set(severity_text, "Error") where IsMatch(body.string, ".*ERROR.*")
+              - set(severity_text, "Fatal") where IsMatch(body.string, ".*FATAL.*")
+
+    exporters:
+      debug:
+        verbosity: ${env:OTEL_DEBUG_VERBOSITY:-none}
+
+      file/traces:
+        path: /collector/logs/traces.json
+        rotation:
+          max_megabytes: 10
+          max_backups: 3
+      file/logs:
+        path: /collector/logs/logs.json
+        rotation:
+          max_megabytes: 10
+          max_backups: 3
+      otlphttp/exporter:
+        endpoint: ${env:INSTANA_OTEL_ENDPOINT_HTTP}
+        headers:
+          x-instana-host: ${env:INSTANA_HOST_NAME}
+          x-instana-key: ${env:INSTANA_KEY}
+        tls:
+          insecure: false
+          insecure_skip_verify: true
+
+    service:
+      extensions:
+        - health_check
+      pipelines:
+        traces/otlp:
+          receivers: [otlp/receiver]
+          processors: [batch]
+          exporters: [otlphttp/exporter, file/traces]
+        logs/otlp:
+          receivers: [otlp/receiver]
+          processors: [transform/severity_parse, batch]
+          exporters: [file/logs, debug]
+        metrics/otlp:
+          receivers: [otlp/receiver]
+          processors: [batch]
+          exporters: [otlphttp/exporter]
+      telemetry:
+        logs:
+          level: ${env:INSTANA_OTEL_LOG_LEVEL:-info}
+          output_paths: ["stdout", "/collector/logs/collector.log"]
+          error_output_paths: ["stderr", "/collector/logs/collector.log"]
+        resource:
+          entity.type: host
+          host.name: ${env:INSTANA_HOST_NAME:-hostname}
+          log.level: ${env:INSTANA_OTEL_LOG_LEVEL:-info}
+          service.instance.id: ${env:INSTANA_HOST_NAME:-hostname}
+          service.name: otel-collector
+          service.version: ${env:INSTANA_OTEL_SERVICE_VERSION:-1.317.1}

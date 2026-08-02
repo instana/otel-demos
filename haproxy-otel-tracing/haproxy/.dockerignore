@@ -1,0 +1,26 @@
+# Exclude socket files
+**/*.sock
+
+# Exclude git directories
+**/.git
+
+# Exclude log files
+**/logs/*
+!**/logs/.keep
+
+# Exclude build artifacts
+**/target
+**/build
+**/.gradle
+**/.mvn
+
+# Exclude IDE files
+**/.idea
+**/.vscode
+**/.settings
+**/*.iml
+
+# Exclude temporary files
+**/*.tmp
+**/*.log
+**/.DS_Store
