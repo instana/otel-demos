@@ -1,4 +1,4 @@
-# ─── Stage 1: Download Instana nginx OTel tracing .so files ─────────────────
+# ─── Stage 1: Download Instana NGINX OTel tracing .so files ─────────────────
 FROM ubuntu:24.04 AS tracing_dependencies
 
 RUN set -x \
@@ -12,7 +12,7 @@ RUN set -x \
 ARG INSTANA_DOWNLOAD_KEY=instana_otel_downloadkey
 ARG INSTANA_AGENT_KEY=instana_otel_downloadkey
 
-# nginx version must match the version installed in the runtime stage exactly.
+# NGINX version must match the version installed in the runtime stage exactly.
 ARG NGINX_VERSION=1.28.0
 ARG SENSOR_VERSION=0.0.15
 # For Alpine-based images change to 'musl'; ubuntu:24.04 uses glibc.
@@ -26,7 +26,7 @@ RUN set -x; \
     download_key="${INSTANA_DOWNLOAD_KEY:-${INSTANA_AGENT_KEY}}"; \
     ngx_arch="$(uname -m)"; \
     [ "$ngx_arch" = "x86_64" ] && ngx_arch="amd64"; \
-    echo "Downloading nginx_otel ${SENSOR_VERSION} for nginx ${NGINX_VERSION} (${ngx_arch} / ${LIBC_VERSION})"; \
+    echo "Downloading nginx_otel ${SENSOR_VERSION} for NGINX ${NGINX_VERSION} (${ngx_arch} / ${LIBC_VERSION})"; \
     tmp_dir="/tmp/nginx_tracing"; mkdir -p "${tmp_dir}"; \
     zip_name="linux-${ngx_arch}-${LIBC_VERSION}-nginx-${NGINX_VERSION}-otel.zip"; \
     curl --user "_:${download_key}" \
@@ -58,14 +58,14 @@ RUN set -x \
   && curl -fsSL https://nginx.org/keys/nginx_signing.key | apt-key add - \
   && apt-get update
 
-# Pin nginx to the exact version whose ABI the tracing .so was compiled against.
+# Pin NGINX to the exact version whose ABI the tracing .so was compiled against.
 # apt-cache madison format: "nginx | <version> | <repo-url>"
 # cut -d'|' -f2 extracts the version column; grep does a substring match so
 # "1.28.0" matches "1.28.0-2~noble" (or any patch suffix the repo uses).
 RUN set -x; \
     nginx_ver="$(apt-cache madison nginx | cut -d'|' -f2 \
         | tr -d '[:blank:]' | grep --fixed-strings "${NGINX_VERSION}" | head -1)"; \
-    [ -z "$nginx_ver" ] && { echo "ERROR: nginx ${NGINX_VERSION} not found in repo" >&2; exit 1; }; \
+    [ -z "$nginx_ver" ] && { echo "ERROR: NGINX ${NGINX_VERSION} not found in repo" >&2; exit 1; }; \
     apt-get install --no-install-recommends --no-install-suggests -y "nginx=${nginx_ver}"; \
     rm -f /etc/nginx/nginx.conf && rm -rf /etc/nginx/conf.d; \
     rm -rf /var/lib/apt/lists/*; \

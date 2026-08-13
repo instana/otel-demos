@@ -1,6 +1,6 @@
 ---
-# Instana idot collector config for nginx-otel-tracing.
-# The otlp/receiver listens on 0.0.0.0:4317 so the nginx container can reach it
+# Instana distribution of OTel (IDOT) collector config for nginx-otel-tracing.
+# The otlp/receiver listens on 0.0.0.0:4317 so the NGINX container can reach it
 # over the Docker network (alias: instana-collector).
 
 extensions:
@@ -60,8 +60,8 @@ processors:
       - action: upsert
         key: host.id
         value: ${env:INSTANA_HOST_ID}
-  # Applied to ALL nginx OTel pipelines (traces/otlp, logs/otlp, metrics/otlp).
-  # Stamps host.id + host.name WITHOUT overwriting service.name so the nginx
+  # Applied to ALL NGINX OTel pipelines (traces/otlp, logs/otlp, metrics/otlp).
+  # Stamps host.id + host.name WITHOUT overwriting service.name so the NGINX
   # service identity (nginx-front-proxy) is preserved.
   resource/host_identity:
     attributes:

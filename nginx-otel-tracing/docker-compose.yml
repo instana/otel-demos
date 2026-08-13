@@ -22,8 +22,8 @@ services:
         - SENSOR_VERSION=0.0.15
         - LIBC_VERSION=glibc
     command: ["/usr/sbin/nginx", "-g", "daemon off;"]
-    # Wait until server-app is running before starting nginx so Docker's
-    # embedded DNS has registered server-app before nginx resolves it.
+    # Wait until server-app is running before starting NGINX so Docker's
+    # embedded DNS has registered server-app before NGINX resolves it.
     depends_on:
       server-app:
         condition: service_started

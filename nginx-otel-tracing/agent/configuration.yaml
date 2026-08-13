@@ -9,10 +9,10 @@
 com.instana.plugin.host:
   name: '${env:INSTANA_AGENT_REPORTED_HOSTNAME}'
 
-# nginx
-# Disable the built-in nginx sensor so the agent does not auto-discover or
-# collect nginx metrics. All nginx metrics are collected by the OTel collector
-# via the nginx OTel module and forwarded via OTLP, avoiding duplicate collection.
+# NGINX
+# Disable the built-in NGINX sensor so the agent does not auto-discover or
+# collect NGINX metrics. All NGINX metrics are collected by the OTel collector
+# via the NGINX OTel module and forwarded via OTLP, avoiding duplicate collection.
 com.instana.plugin.nginx:
   enabled: false
 
@@ -22,7 +22,7 @@ com.instana.plugin.javatrace:
     # Lightweight Bytecode Instrumentation, enabled by default.
     enabled: true
   # Inject W3C traceparent/tracestate in addition to Instana headers.
-  # This allows the nginx OTel module (otel_trace_context propagate) to read
+  # This allows the NGINX OTel module (otel_trace_context propagate) to read
   # the parent trace context and create a child span rather than a root span.
   propagation:
     - style: W3C
