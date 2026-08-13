@@ -1,4 +1,4 @@
-FROM amd64/openjdk:11-jdk-slim AS nginx-tracing-client-app-build
+FROM azul/zulu-openjdk:11 AS nginx-tracing-client-app-build
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -y && apt-get install -y --no-install-recommends --no-install-suggests \
