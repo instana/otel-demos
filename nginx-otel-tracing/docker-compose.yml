@@ -19,7 +19,6 @@ services:
         # Override this to use your real Instana download key at build time.
         - INSTANA_DOWNLOAD_KEY=${download_key:-instana_otel_downloadkey}
         - NGINX_VERSION=1.28.0
-        - SENSOR_VERSION=0.0.15
         - LIBC_VERSION=glibc
     command: ["/usr/sbin/nginx", "-g", "daemon off;"]
     # Wait until server-app is running before starting NGINX so Docker's
