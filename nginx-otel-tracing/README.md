@@ -86,6 +86,18 @@ Instana as the service name for all NGINX spans.
 - **Infrastructure** — navigate to *Infrastructure* and filter by zone using the `agent_zone` value
   configured in `.env` (default: `nginx-tracing-demo`) to find the host where the Instana agent is running.
 
+In the service dashboard, this appears as follows:
+
+![Service dashboard](images/nginx-otel-dashboard.png)
+
+In the flow graph, this appears as follows:
+
+![Flow graph](images/nginx-otel-flow-graph.png)
+
+In the analyze view, this appears as follows:
+
+![Analyze view](images/nginx-otel-analyse-view.png)
+
 ## How SSL Variant Selection Works
 
 The Instana NGINX OTel module ships two `.so` variants in one zip:
