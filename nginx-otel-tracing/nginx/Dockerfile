@@ -4,7 +4,7 @@ FROM ubuntu:24.04 AS tracing_dependencies
 RUN set -x \
   && apt-get update \
   && apt-get install --no-install-recommends --no-install-suggests -y \
-       curl ca-certificates unzip \
+       curl ca-certificates unzip lynx \
   && rm -rf /var/lib/apt/lists/*
 
 # Instana Artifactory credentials — pass as build-args or override below.
@@ -14,7 +14,6 @@ ARG INSTANA_AGENT_KEY=instana_otel_downloadkey
 
 # NGINX version must match the version installed in the runtime stage exactly.
 ARG NGINX_VERSION=1.28.0
-ARG SENSOR_VERSION=0.0.15
 # For Alpine-based images change to 'musl'; ubuntu:24.04 uses glibc.
 ARG LIBC_VERSION=glibc
 
@@ -23,16 +22,19 @@ ENV ARTI_PATH=https://artifact-public.instana.io/artifactory/shared/com/instana/
 # Detect CPU arch (uname -m returns x86_64; Artifactory uses amd64).
 # Download the single zip that contains BOTH ssl1.1x and ssl3x .so variants.
 RUN set -x; \
-    download_key="${INSTANA_DOWNLOAD_KEY:-${INSTANA_AGENT_KEY}}"; \
+    download_key=$([ ! -z "${INSTANA_DOWNLOAD_KEY}" ] && echo "${INSTANA_DOWNLOAD_KEY}" || echo "${INSTANA_AGENT_KEY}"); \
+    echo "Using download key ${download_key}; NGINX version: ${NGINX_VERSION}; LIBC version: ${LIBC_VERSION}"; \
+    sensor_version=$(lynx -auth _:${download_key} -dump -listonly ${ARTI_PATH} | grep -o 'https:.*/[0-9]\+\.[0-9]\+\.[0-9]\+/' | rev | cut -d '/' -f 2 | rev | sort -V | tail -n1); \
+    echo "Using sensor version ${sensor_version} for NGINX ${NGINX_VERSION}."; \
     ngx_arch="$(uname -m)"; \
     [ "$ngx_arch" = "x86_64" ] && ngx_arch="amd64"; \
-    echo "Downloading nginx_otel ${SENSOR_VERSION} for NGINX ${NGINX_VERSION} (${ngx_arch} / ${LIBC_VERSION})"; \
+    echo "CPU arch: ${ngx_arch}"; \
     tmp_dir="/tmp/nginx_tracing"; mkdir -p "${tmp_dir}"; \
     zip_name="linux-${ngx_arch}-${LIBC_VERSION}-nginx-${NGINX_VERSION}-otel.zip"; \
     curl --user "_:${download_key}" \
          --silent --show-error --fail \
          --output "${tmp_dir}/otel.zip" \
-         "${ARTI_PATH}${SENSOR_VERSION}/${zip_name}"; \
+         "${ARTI_PATH}${sensor_version}/${zip_name}"; \
     cd "${tmp_dir}" && unzip -q otel.zip; \
     mkdir -p /opt/instana/nginx; \
     # Both SSL variants are extracted; the runtime entrypoint selects the right one.
