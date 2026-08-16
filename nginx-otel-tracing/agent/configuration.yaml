@@ -10,11 +10,10 @@ com.instana.plugin.host:
   name: '${env:INSTANA_AGENT_REPORTED_HOSTNAME}'
 
 # NGINX
-# Disable the built-in NGINX sensor so the agent does not auto-discover or
-# collect NGINX metrics. All NGINX metrics are collected by the OTel collector
-# via the NGINX OTel module and forwarded via OTLP, avoiding duplicate collection.
+# Enable the built-in NGINX sensor so the agent scrapes stub_status metrics
+# and reports them via the agent pipeline.
 com.instana.plugin.nginx:
-  enabled: false
+  enabled: true
 
 # Java Tracing
 com.instana.plugin.javatrace:

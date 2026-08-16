@@ -26,25 +26,13 @@ receivers:
       - /var/log/cloud-init-output.log
     include_file_path: true
 
-  hostmetrics:
-    collection_interval: 1m
-    scrapers:
-      processes:
-      cpu:
-      filesystem:
-      load:
-      memory:
-      network:
-      paging:
-      system:
-
 processors:
   batch: {}
   filter: {}
   k8sattributes: {}
   probabilistic_sampler: {}
-  # Applied to the collector's OWN telemetry pipelines (logs/collector, metrics/collector).
-  # Stamps host.id so the collector's self-metrics are correlated to the same host.
+  # Applied to the logs/collector pipeline.
+  # Stamps host.id so the collector's self-logs are correlated to the same host.
   # IMPORTANT: use ${env:INSTANA_HOST_ID} not ${file:/etc/machine-id} — the file
   # provider reads the container's own /etc/machine-id and includes a trailing \n,
   # producing "uuid\n" which the backend treats as an unknown host.
@@ -123,10 +111,6 @@ service:
     logs/collector:
       receivers: [filelog]
       processors: [resource/host, transform/severity_parse, batch]
-      exporters: [otlphttp/exporter]
-    metrics/collector:
-      receivers: [hostmetrics]
-      processors: [resource/host, batch]
       exporters: [otlphttp/exporter]
   telemetry:
     logs:
