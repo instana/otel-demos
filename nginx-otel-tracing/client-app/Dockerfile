@@ -9,7 +9,7 @@ WORKDIR /opt/client-app/
 COPY . .
 RUN ./mvnw clean package
 
-FROM amd64/openjdk:11-jre-slim
+FROM azul/zulu-openjdk:11-jre
 
 VOLUME /tmp
 WORKDIR /opt/client-app/
