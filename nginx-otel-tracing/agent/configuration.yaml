@@ -1,0 +1,28 @@
+# Manual a-priori configuration. Configuration will be only used when the sensor
+# is actually installed by the agent.
+# Changes are hot reloaded unless otherwise mentioned.
+
+# Host
+# Override the hostname so the agent registers the same host identity as the
+# OTel collector (INSTANA_HOST_NAME). Without this the agent uses its Docker
+# container hostname, which creates a second, separate infrastructure entity.
+com.instana.plugin.host:
+  name: '${env:INSTANA_AGENT_REPORTED_HOSTNAME}'
+
+# NGINX
+# Enable the built-in NGINX sensor so the agent scrapes stub_status metrics
+# and reports them via the agent pipeline.
+com.instana.plugin.nginx:
+  enabled: true
+
+# Java Tracing
+com.instana.plugin.javatrace:
+  instrumentation:
+    # Lightweight Bytecode Instrumentation, enabled by default.
+    enabled: true
+  # Inject W3C traceparent/tracestate in addition to Instana headers.
+  # This allows the NGINX OTel module (otel_trace_context propagate) to read
+  # the parent trace context and create a child span rather than a root span.
+  propagation:
+    - style: W3C
+    - style: INSTANA

@@ -13,6 +13,14 @@ haproxy-otel-tracing/agent/logs/*
 haproxy-otel-tracing/collector/logs/*
 !haproxy-otel-tracing/collector/logs/.gitkeep
 
+# nginx-otel-demo log files
+nginx-otel-tracing/agent/logs/*
+nginx-otel-tracing/collector/logs/*
+nginx-otel-tracing/nginx/logs/*
+!nginx-otel-tracing/agent/logs/.gitkeep
+!nginx-otel-tracing/collector/logs/.gitkeep
+!nginx-otel-tracing/nginx/logs/.gitkeep
+
 ### Java
 
 # Compiled class file

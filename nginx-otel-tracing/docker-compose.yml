@@ -1,0 +1,115 @@
+# version: '3'
+services:
+
+  client-app:
+    build:
+      context: ./client-app
+    networks:
+      - nginxmesh
+    environment:
+      - target_url=http://nginx:10080
+      - INSTANA_AGENT_HOST=instana-agent
+      - INSTANA_AGENT_PORT=42699
+
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+      args:
+        # Override this to use your real Instana download key at build time.
+        - INSTANA_DOWNLOAD_KEY=${download_key:-instana_otel_downloadkey}
+        - NGINX_VERSION=1.28.0
+        - LIBC_VERSION=glibc
+    command: ["/usr/sbin/nginx", "-g", "daemon off;"]
+    # Wait until server-app is running before starting NGINX so Docker's
+    # embedded DNS has registered server-app before NGINX resolves it.
+    depends_on:
+      server-app:
+        condition: service_started
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/logs:/var/log/nginx
+    networks:
+      nginxmesh:
+        aliases:
+          - nginx
+    expose:
+      - "10080"
+
+  server-app:
+    build:
+      context: ./server-app
+    networks:
+      nginxmesh:
+        aliases:
+          - server-app
+    environment:
+      - SERVER_PORT=8080
+      - INSTANA_AGENT_HOST=instana-agent
+      - INSTANA_AGENT_PORT=42699
+    expose:
+      - "8080"
+
+  agent:
+    image: icr.io/instana/agent
+    pid: "host"
+    privileged: true
+    volumes:
+      - /var/run:/var/run
+      - /run:/run
+      # Instana agent configuration.
+      - ./agent/configuration.yaml:/opt/instana/agent/etc/instana/configuration.yaml:ro
+      # Write spans to disk for local debugging.
+      - ./agent/com.instana.agent.main.sender.File.cfg:/opt/instana/agent/etc/instana/com.instana.agent.main.sender.File.cfg:ro
+      - ./agent/logs:/opt/instana/agent/data/log
+    networks:
+      nginxmesh:
+        aliases:
+          - instana-agent
+    environment:
+      - INSTANA_AGENT_ENDPOINT=${agent_endpoint:-ingress-red-saas.instana.io}
+      - INSTANA_AGENT_ENDPOINT_PORT=${agent_endpoint_port:-443}
+      - INSTANA_DOWNLOAD_KEY=${download_key}
+      - INSTANA_AGENT_KEY=${agent_key}
+      - INSTANA_AGENT_ZONE=${agent_zone:-nginx-tracing-demo}
+      # Make the agent report the same hostname as the OTel collector so both
+      # data sources are merged into a single infrastructure entity in Instana.
+      - INSTANA_AGENT_REPORTED_HOSTNAME=${INSTANA_HOST_NAME}
+    healthcheck:
+      test: ["CMD", "curl", "localhost:42699"]
+      interval: 8s
+      timeout: 10s
+      retries: 5
+    expose:
+      - "42699"
+
+  collector:
+    image: icr.io/instana/idot:latest
+    user: "0"
+    entrypoint: ["/instana-otelcol"]
+    command: ["--config", "/etc/instana-otelcol/config.yaml"]
+    volumes:
+      - ./collector/config.yaml:/etc/instana-otelcol/config.yaml:ro
+      - /var/log:/var/log:ro
+      - ./collector/logs:/collector/logs
+      # Expose the host machine-id so the collector can stamp spans with host.id,
+      # which the Instana backend uses to correlate OTel entities with the
+      # agent-managed host (the agent also reads /etc/machine-id via pid:host).
+      - /etc/machine-id:/etc/machine-id:ro
+    networks:
+      nginxmesh:
+        aliases:
+          - instana-collector
+    expose:
+      - "4317"
+    environment:
+      - INSTANA_OTEL_SERVICE_VERSION=${INSTANA_OTEL_SERVICE_VERSION}
+      - INSTANA_OTEL_ENDPOINT_HTTP=${INSTANA_OTEL_ENDPOINT_HTTP}
+      - INSTANA_KEY=${agent_key}
+      - INSTANA_HOST_NAME=${INSTANA_HOST_NAME}
+      - INSTANA_OTEL_LOG_LEVEL=${INSTANA_OTEL_LOG_LEVEL}
+      - OTEL_DEBUG_VERBOSITY=${OTEL_DEBUG_VERBOSITY}
+      - INSTANA_HOST_ID=${INSTANA_HOST_ID}
+
+networks:
+  nginxmesh: {}
