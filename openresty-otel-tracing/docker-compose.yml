@@ -69,7 +69,7 @@ services:
       - INSTANA_AGENT_ENDPOINT_PORT=${agent_endpoint_port:-443}
       - INSTANA_DOWNLOAD_KEY=${download_key}
       - INSTANA_AGENT_KEY=${agent_key}
-      - INSTANA_AGENT_ZONE=${agent_zone:-openresty-otel-tracing-demo}
+      - INSTANA_AGENT_ZONE=${agent_zone:-openresty-tracing-demo}
     healthcheck:
       test: ["CMD", "curl", "localhost:42699"]
       interval: 8s
