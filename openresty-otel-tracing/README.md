@@ -214,7 +214,7 @@ RUN set -x; \
     echo "Symlink: ngx_otel_module.so → ngx_otel_module_${variant}.so"
 ```
 
-[`nginx/nginx.conf`](nginx/nginx.conf) always references the fixed symlink path
+[`openresty/nginx.conf`](openresty/nginx.conf) always references the fixed symlink path
 via `load_module /usr/local/lib/instana/ngx_otel_module.so;` — it never needs to know about SSL variants.
 
 ## Key Configuration Files
@@ -224,7 +224,7 @@ via `load_module /usr/local/lib/instana/ngx_otel_module.so;` — it never needs 
 | [`openresty/Dockerfile`](openresty/Dockerfile) | Multi-stage build: downloads both .so variants in stage 1; uses official OpenResty Docker image, detects OpenSSL version, and creates symlink in stage 2 |
 | [`docker-compose.yml`](docker-compose.yml) | Service orchestration |
 | [`openresty/nginx.conf`](openresty/nginx.conf) | OpenResty/NGINX main config with OTel directives; bind-mounted into the container |
-| [`collector/config.yaml`](collector/config.yaml) | [IDOT collector] (https://github.com/instana/instana-otel-collector) pipeline config |
+| [`collector/config.yaml`](collector/config.yaml) | [IDOT collector](https://github.com/instana/instana-otel-collector) pipeline config |
 | [`agent/configuration.yaml`](agent/configuration.yaml) | Instana agent config |
 | [`.env.example`](.env.example) | Template for the required `.env` file |
 
