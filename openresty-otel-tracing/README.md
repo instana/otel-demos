@@ -158,7 +158,7 @@ http {
 
     server {
       error_log /dev/stdout info;
-      listen 8080;
+      listen 10080;
       server_name localhost;
       # lua-resty-http needs a DNS resolver. Use the Docker default one here.
       resolver 127.0.0.11 valid=30s;
@@ -223,7 +223,7 @@ via `load_module /usr/local/lib/instana/ngx_otel_module.so;` — it never needs 
 |---|---|
 | [`openresty/Dockerfile`](openresty/Dockerfile) | Multi-stage build: downloads both .so variants in stage 1; uses official OpenResty Docker image, detects OpenSSL version, and creates symlink in stage 2 |
 | [`docker-compose.yml`](docker-compose.yml) | Service orchestration |
-| [`openresty/nginx.conf`](openresty/nginx.conf) | NGINX main config with OTel directives; bind-mounted read-only into the container |
+| [`openresty/nginx.conf`](openresty/nginx.conf) | OpenResty/NGINX main config with OTel directives; bind-mounted into the container |
 | [`collector/config.yaml`](collector/config.yaml) | [IDOT collector] (https://github.com/instana/instana-otel-collector) pipeline config |
 | [`agent/configuration.yaml`](agent/configuration.yaml) | Instana agent config |
 | [`.env.example`](.env.example) | Template for the required `.env` file |
