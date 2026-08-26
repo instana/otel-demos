@@ -122,6 +122,22 @@ Telemetry export completed successfully.
 
 ---
 
+## Instana UI screenshots
+
+### Total calls
+
+![Instana total calls view](images/total-calls.jpg)
+
+### Calls view
+
+![Instana calls view](images/calls.jpg)
+
+### Trace details
+
+![Instana trace details view](images/trace-details.jpg)
+
+---
+
 ## What the sample demonstrates
 
 ### Trace hierarchy
