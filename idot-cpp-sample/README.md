@@ -38,7 +38,7 @@ service:
   version: "1.0"           # service.version resource attribute
 
 otlp:
-  endpoint: 127.0.0.1:4317 # OTLP/gRPC endpoint — host:port, no scheme
+  endpoint: 127.0.0.1:4317  # OTLP/gRPC endpoint — change to your collector endpoint
   insecure: true            # true = plaintext gRPC (no TLS)
   timeout_ms: 10000         # export timeout in milliseconds
 
@@ -46,6 +46,11 @@ sample:
   iterations: 10            # number of root spans to emit
 ```
 
+> **Endpoint:** `127.0.0.1:4317` is the default OTLP/gRPC endpoint used by this
+> sample. `127.0.0.1` means localhost and `4317` is the standard OTLP/gRPC port.
+> Update this value if your OpenTelemetry collector is running at a different
+> host or port.
+>
 > **Endpoint format:** `host:port` with no scheme prefix —
 > `127.0.0.1:4317`, **not** `grpc://127.0.0.1:4317`.
 
