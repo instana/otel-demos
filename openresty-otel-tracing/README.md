@@ -1,6 +1,6 @@
 # Instana OpenResty OTel Tracing Demo
 
-This directory demonstrates Instana's [OpenResty](https://openresty.org/) OpenTelemetry tracing functionality
+This directory demonstrates Instana integration with [OpenResty](https://openresty.org/) OpenTelemetry tracing functionality
 based on [OpenTelemetry (OTel)](https://opentelemetry.io/).
 
 OpenResty is basically [NGINX](https://nginx.org/) enhanced by the [Lua programming language](https://www.lua.org/).
@@ -14,6 +14,11 @@ and a [lua-resty-http greater or equal 0.18.0](https://github.com/ledgetech/lua-
 
 NGINX OTel traces are sent to the [Instana distribution of OTel collector (IDOT)](https://github.com/instana/instana-otel-collector) via gRPC to port 4317.
 The collector forwards them to the Instana backend via the [OpenTelemetry protocol (OTLP)](https://opentelemetry.io/docs/specs/otel/protocol/) HTTP.
+
+**Note:** Instana support does not cover the `lua-resty-http` OpenSource project, any other Lua HTTP client, the NGINX Lua module, NGINX, or OpenResty.
+Please refer to the support options of those projects in case you need help with those.
+
+**Note:** This demo has been created under a very controlled environment. Customization and your own Lua code are out of Instana scope.
 
 ## Prerequisites
 
@@ -121,72 +126,7 @@ The simplest way is just to assign to the agent a unique zone (the `docker-compo
 * enable OTel trace context propagation for every location
 * let `lua-resty-http` greater equal 0.18.0 do the W3C `traceparent` header handling for you automatically
 
-```nginx
-# Load the Instana NGINX OpenTelemetry module
-load_module modules/ngx_otel_module.so;
-...
-
-http {
-...
-    ##################
-    # Instana Config #
-    ##################
-
-    # Set up an upstream called "backend" to the server-app service at port 8080
-    # to proxy regular NGINX requests there
-    upstream backend {
-      server server-app:8080;
-    }
-
-    # Configure the OTel exporter to send OTel spans to the OTel plugin of the Instana agent
-    # or to the Instana OTLP endpoint directly with the Instana agent key as x-instana-key
-    otel_exporter {
-        endpoint instana-agent:4317;
-        #
-        # Alternative: Send spans directly to an Instana OTLP endpoint (adapt "red" to your region):
-        #endpoint https://otlp-red-saas.instana.io:4317;
-        #header x-instana-key $agent_key;
-        #
-        # NOTE: Use `envsubst` to replace the agent_key variable with the actual Instana agent key
-        #       but never commit this secret to any source code repository.
-    }
-
-    # Enable OpenTelemetry tracing
-    otel_trace on;
-    # Set a service name for the OTel spans
-    otel_service_name openresty-otel-proxy;
-
-    server {
-      error_log /dev/stdout info;
-      listen 10080;
-      server_name localhost;
-      # lua-resty-http needs a DNS resolver. Use the Docker default one here.
-      resolver 127.0.0.11 valid=30s;
-      # NOTE: The DNS resolver does not work for OpenShift. Use a service environment variable,
-      # such as `SERVER_APP_SERVICE_HOST` there. Compare to git branch `openshift`.
-
-      location /openresty-otel-demo {
-        # Enable OTel trace context propagation for every location
-        otel_trace_context propagate;
-        proxy_pass http://backend;
-      }
-
-      location /lua-otel-demo {
-        # Enable OTel trace context propagation for every location
-        otel_trace_context propagate;
-        content_by_lua_block {
-          local http = require "resty.http"
-
-          # Send an HTTP request with lua-resty-http and let the resolver above do
-          # the DNS resolution of host name "server-app"
-          local httpc = http.new()
-          local res, err = httpc:request_uri("http://server-app:8080", {
-            method = "GET",
-          })
-          ...
-        }
-      }
-```
+See [openresty/nginx.conf](openresty/nginx.conf) for details.
 
 ## How SSL Variant Selection Works
 
