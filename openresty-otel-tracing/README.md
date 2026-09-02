@@ -15,10 +15,12 @@ and a [lua-resty-http greater or equal 0.18.0](https://github.com/ledgetech/lua-
 NGINX OTel traces are sent to the [Instana distribution of OTel collector (IDOT)](https://github.com/instana/instana-otel-collector) via gRPC to port 4317.
 The collector forwards them to the Instana backend via the [OpenTelemetry protocol (OTLP)](https://opentelemetry.io/docs/specs/otel/protocol/) HTTP.
 
-**Note:** Instana support does not cover the `lua-resty-http` OpenSource project, any other Lua HTTP client, the NGINX Lua module, NGINX, or OpenResty.
-Please refer to the support options of those projects in case you need help with those.
+**Note:** Instana support does not cover the `lua-resty-http` OpenSource project, any other Lua HTTP client, the NGINX Lua module, OpenResty and NGINX proxy itself.
+Any observed issues with these third party components should be routed to respective vendors.
+However, this demo app uses an Instana specific NGINX OTel module and the IDOT collector which are maintained and supported by Instana.
 
-**Note:** This demo has been created under a very controlled environment. Customization and your own Lua code are out of Instana scope.
+**Note:** This demo has been created under a very controlled environment. Customization and your own Lua code are out of scope.
+Instana only ingests the OpenTelemetry data emitted by the OpenResty HTTP client Lua module.
 
 ## Prerequisites
 
