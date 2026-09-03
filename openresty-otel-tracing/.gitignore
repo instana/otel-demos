@@ -1,0 +1,7 @@
+.env*
+.classpath
+.project
+org.eclipse*
+openresty/*.so
+agent/logs/*.log*
+collector/logs/*

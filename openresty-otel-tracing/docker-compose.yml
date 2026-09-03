@@ -1,0 +1,122 @@
+version: '3'
+services:
+
+  client-app:
+    build:
+      context: ./client-app
+    networks:
+      - openrestymesh
+    environment:
+      - target_url=http://openresty:10080/openresty-otel-demo
+      - INSTANA_AGENT_HOST=instana-agent
+      - INSTANA_AGENT_PORT=42699
+
+  client-app-lua:
+    build:
+      context: ./client-app
+    networks:
+      - openrestymesh
+    environment:
+      - target_url=http://openresty:10080/lua-otel-demo
+      - INSTANA_AGENT_HOST=instana-agent
+      - INSTANA_AGENT_PORT=42699
+
+  openresty:
+    build:
+      context: ./openresty
+      args:
+        # Override this to use your real Instana download key at build time.
+        - INSTANA_DOWNLOAD_KEY=${download_key:-instana_otel_downloadkey}
+        - NGINX_VERSION=1.31.1
+        - LIBC_VERSION=glibc
+    # Wait until server-app is running before starting OpenResty so Docker's
+    # embedded DNS has registered server-app before OpenResty resolves it.
+    depends_on:
+      server-app:
+        condition: service_started
+    volumes:
+      - ./openresty/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
+    networks:
+      openrestymesh:
+        aliases:
+          - openresty
+    expose:
+      - "10080"
+
+  server-app:
+    build:
+      context: ./server-app
+    networks:
+      openrestymesh:
+        aliases:
+          - server-app
+    environment:
+      - SERVER_PORT=8080
+      - INSTANA_AGENT_HOST=instana-agent
+      - INSTANA_AGENT_PORT=42699
+    expose:
+      - "8080"
+
+  agent:
+    image: icr.io/instana/agent
+    pid: "host"
+    privileged: true
+    volumes:
+      - /var/run:/var/run
+      - /run:/run
+      # Instana agent configuration.
+      - ./agent/configuration.yaml:/opt/instana/agent/etc/instana/configuration.yaml:ro
+      # Include Agent logging config (only NGINX sensor in debug logging - not for production)
+      - ./agent/org.ops4j.pax.logging.cfg:/opt/instana/agent/etc/org.ops4j.pax.logging.cfg:ro
+      # Write Java tracer spans to disk for local debugging (not for production).
+      - ./agent/com.instana.agent.main.sender.File.cfg:/opt/instana/agent/etc/instana/com.instana.agent.main.sender.File.cfg:ro
+      # Mount the agent logs directly for local debugging.
+      - ./agent/logs:/opt/instana/agent/data/log
+    networks:
+      openrestymesh:
+        aliases:
+          - instana-agent
+    environment:
+      - INSTANA_AGENT_ENDPOINT=${agent_endpoint:-ingress-red-saas.instana.io}
+      - INSTANA_AGENT_ENDPOINT_PORT=${agent_endpoint_port:-443}
+      - INSTANA_DOWNLOAD_KEY=${download_key}
+      - INSTANA_AGENT_KEY=${agent_key}
+      - INSTANA_AGENT_ZONE=${agent_zone:-openresty-tracing-demo}
+    healthcheck:
+      test: ["CMD", "curl", "localhost:42699"]
+      interval: 8s
+      timeout: 10s
+      retries: 5
+    expose:
+      - "42699"
+
+  collector:
+    image: icr.io/instana/idot:latest
+    user: "0"
+    entrypoint: ["/instana-otelcol"]
+    command: ["--config", "/etc/instana-otelcol/config.yaml"]
+    volumes:
+      - ./collector/config.yaml:/etc/instana-otelcol/config.yaml:ro
+      - /var/log:/var/log:ro
+      - ./collector/logs:/collector/logs
+      # Expose the host machine-id so the collector can stamp spans with host.id,
+      # which the Instana backend uses to correlate OTel entities with the
+      # agent-managed host (the agent also reads /etc/machine-id via pid:host).
+      - /etc/machine-id:/etc/machine-id:ro
+    networks:
+      openrestymesh:
+        aliases:
+          - instana-collector
+    expose:
+      - "4317"
+    environment:
+      - INSTANA_OTEL_SERVICE_VERSION=${INSTANA_OTEL_SERVICE_VERSION}
+      - INSTANA_OTEL_ENDPOINT_HTTP=${INSTANA_OTEL_ENDPOINT_HTTP}
+      - INSTANA_KEY=${agent_key}
+      - INSTANA_HOST_NAME=${INSTANA_HOST_NAME}
+      - INSTANA_OTEL_LOG_LEVEL=${INSTANA_OTEL_LOG_LEVEL}
+      - OTEL_DEBUG_VERBOSITY=${OTEL_DEBUG_VERBOSITY}
+      - INSTANA_HOST_ID=${INSTANA_HOST_ID}
+
+networks:
+  openrestymesh: {}
