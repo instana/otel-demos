@@ -1,0 +1,11 @@
+service:
+  name: otel-sample
+  version: "1.0"
+
+otlp:
+  endpoint: localhost:4317
+  insecure: true
+  timeout_ms: 10000
+
+sample:
+  iterations: 10
