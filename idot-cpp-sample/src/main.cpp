@@ -5,8 +5,13 @@
 #include <map>
 #include <string>
 #include <thread>
-#include <sys/types.h>
-#include <unistd.h>
+#ifdef _WIN32
+#  include <winsock2.h>   // gethostname (must precede windows.h)
+#  include <windows.h>    // GetCurrentProcessId
+#else
+#  include <sys/types.h>
+#  include <unistd.h>
+#endif
 
 #include <opentelemetry/exporters/otlp/otlp_grpc_exporter_factory.h>
 #include <opentelemetry/exporters/otlp/otlp_grpc_exporter_options.h>
@@ -43,9 +48,7 @@ struct Config
     int         iterations      = 5;
 };
 
-// Reads the sample config.yaml file.
-// This is a minimal parser for the simple key: value structure used in
-// config.yaml.  It is not a general-purpose YAML parser.
+// Reads config.yaml and populates a Config; falls back to defaults if not found.
 static Config LoadConfig(const std::string& filename)
 {
     Config cfg;
@@ -53,7 +56,7 @@ static Config LoadConfig(const std::string& filename)
     std::ifstream file(filename);
     if (!file.is_open())
     {
-        std::cerr << "config.yaml not found — using defaults." << std::endl;
+        std::cerr << "config.yaml not found - using defaults." << std::endl;
         return cfg;
     }
 
@@ -107,7 +110,7 @@ static Config LoadConfig(const std::string& filename)
     }
     catch (const std::exception& e)
     {
-        std::cerr << "Config parse error: " << e.what() << " — using defaults." << std::endl;
+        std::cerr << "Config parse error: " << e.what() << " - using defaults." << std::endl;
     }
 
     return cfg;
@@ -128,27 +131,27 @@ static void InitTelemetry(const Config& cfg)
 
     auto exporter  = otlp::OtlpGrpcExporterFactory::Create(options);
 
-    // SimpleSpanProcessor exports each span synchronously on span->End().
-    // Production services typically use BatchSpanProcessor instead.
+    // SimpleSpanProcessor exports each span synchronously on span->End(); sufficient for this sample.
     auto processor = sdktrace::SimpleSpanProcessorFactory::Create(std::move(exporter));
 
-    // Resource attributes are attached to every exported span.
-    // process.pid (integer) is read by the Instana agent's PID lookup to
-    // correlate incoming OTLP spans to a discovered process on the host.
-    // host.name helps Instana place the service on the correct infrastructure node.
     char hostname[256] = {};
     ::gethostname(hostname, sizeof(hostname) - 1);
+
+#ifdef _WIN32
+    int64_t pid = static_cast<int64_t>(::GetCurrentProcessId());
+#else
+    int64_t pid = static_cast<int64_t>(::getpid());
+#endif
 
     auto res = resource::Resource::Create({
         {opentelemetry::semconv::service::kServiceName,    cfg.service_name},
         {opentelemetry::semconv::service::kServiceVersion, cfg.service_version},
         {"host.name",                                      std::string(hostname)},
-        {"process.pid",                                    static_cast<int64_t>(::getpid())},
+        {"process.pid",                                    pid},
     });
 
     g_provider = sdktrace::TracerProviderFactory::Create(std::move(processor), res);
 
-    // Register the provider globally so all instrumented code shares it.
     std::shared_ptr<trace::TracerProvider> api_provider = g_provider;
     sdktrace::Provider::SetTracerProvider(api_provider);
 }
@@ -162,12 +165,10 @@ static void ShutdownTelemetry()
 {
     if (!g_provider) return;
 
-    // Flush pending telemetry before shutting down.
-    // This is especially important when using BatchSpanProcessor.
     g_provider->ForceFlush(std::chrono::milliseconds(10000));
     g_provider->Shutdown();
 
-    // Replace the global provider with a no-op before releasing the SDK provider.
+    // Reset the global provider to a no-op before releasing the SDK provider.
     trace::Provider::SetTracerProvider(
         nostd::shared_ptr<trace::TracerProvider>(new trace::NoopTracerProvider));
 
@@ -175,10 +176,9 @@ static void ShutdownTelemetry()
 }
 
 // ---------------------------------------------------------------------------
-// Sample workload — one root span per order with six child spans
+// Sample workload - one root span per order with six child spans
 // ---------------------------------------------------------------------------
 
-// Returns StartSpanOptions that parent new spans under the current active span.
 static trace::StartSpanOptions ChildOpts(trace::SpanKind kind = trace::SpanKind::kInternal)
 {
     trace::StartSpanOptions o;
@@ -193,12 +193,11 @@ static void RunWorkload(const Config& cfg)
 
     for (int i = 1; i <= cfg.iterations; ++i)
     {
-        // Root span — SERVER kind marks this as the entry point of the request.
+        // Root span - SERVER kind marks this as the entry point of the request.
         auto root = tracer->StartSpan("Process Order", ChildOpts(trace::SpanKind::kServer));
         trace::Scope rootScope(root);
 
-        root->SetAttribute("order.id",    i);
-        root->SetAttribute("service.version", cfg.service_version);
+        root->SetAttribute("order.id", i);
 
         std::cout << "[" << i << "/" << cfg.iterations << "] Processing order..." << std::endl;
 

@@ -1,17 +1,13 @@
 # IDOT OpenTelemetry C++ Sample
 
-A minimal, self-contained C++ application that demonstrates how to link and use
-the **unified Instana Distribution of OpenTelemetry (IDOT) C++ shared library**
-(`libopentelemetry_cpp.so`) from a standalone project.
+This sample shows how to build and run a C++ application that is instrumented
+with the **Instana Distribution of OpenTelemetry (IDOT) C++ library** and sends
+traces to an OTLP/gRPC collector.
 
-The sample simulates an order-processing service. It creates distributed traces
-with parent and child spans, sets attributes and events, and exports them via
-**OTLP/gRPC** to any OpenTelemetry-compatible collector (e.g. Instana, Jaeger,
-OpenTelemetry Collector).
-
-> The prebuilt unified shared library (`libopentelemetry_cpp.so`) is distributed
-> as a ready-to-use package. Extract it to a directory of your choice and point
-> the build at that location using `OTEL_INSTALL` as shown below.
+The included sample application instruments a minimal order-processing workflow
+and exports traces over OTLP/gRPC - giving you a working reference for span
+creation, child spans, attributes, events, and context propagation with the
+IDOT C++ library.
 
 ---
 
@@ -19,84 +15,121 @@ OpenTelemetry Collector).
 
 | Requirement | Notes |
 |---|---|
-| C++17 compiler | GCC 9+ or Clang 10+ (Linux); IBM XL C/C++ or GCC (AIX) |
+| C++17 compiler | GCC 9+ or Clang 10+ (Linux); IBM XL C/C++ or GCC (AIX); MSVC 2019+ (Windows) |
 | CMake 3.16+ | `cmake --version` |
-| [IDOT package](https://link-to-idot-package) | Extracted to any directory on the build host |
+| [IDOT package](https://link-to-idot-package) | Download and extract to a directory of your choice |
+| OpenSSL 3 | Required on all platforms - `libopentelemetry_cpp` links against it at runtime. Linux/AIX: install via the system package manager (`openssl-libs` / `openssl`). Windows: add `libssl-3-x64.dll` / `libcrypto-3-x64.dll` to `PATH` - available from [Win64 OpenSSL](https://slproweb.com/products/Win32OpenSSL.html) or bundled with Git for Windows. |
 
-No external package manager is required. gRPC, Protobuf, and Abseil are
-statically embedded inside `libopentelemetry_cpp.so`.
+gRPC, Protobuf, and Abseil are statically embedded inside the IDOT library, no other libraries need to be installed.
 
 ---
 
-## Configure
+## Step 1  -  Extract the IDOT package
 
-Edit `config.yaml` before building or running:
+Extract the downloaded IDOT package and point `OTEL_INSTALL` at it.
+All subsequent steps use this variable.
+
+**Linux / AIX**
+```bash
+export OTEL_INSTALL=/opt/otel-pkg
+```
+
+**Windows (Developer PowerShell for VS 2022)**
+```powershell
+$env:OTEL_INSTALL = "C:\otel-pkg"
+```
+
+---
+
+## Step 2  -  Edit `config.yaml`
+
+Set the `endpoint` to the host and port of your collector. Use the IP address
+of the machine running the collector  -  `localhost` only works if the collector
+is on the same machine as the application.
 
 ```yaml
 service:
-  name: otel-sample        # service.name resource attribute
-  version: "1.0"           # service.version resource attribute
+  name: otel-sample
+  version: "1.0"
 
 otlp:
-  endpoint: 127.0.0.1:4317  # OTLP/gRPC endpoint — change to your collector endpoint
-  insecure: true            # true = plaintext gRPC (no TLS)
-  timeout_ms: 10000         # export timeout in milliseconds
+  endpoint: 192.168.1.10:4317  # host:port of your collector  -  no scheme prefix (not grpc://...)
+  insecure: true               # true = plaintext gRPC (no TLS)
+  timeout_ms: 10000
 
 sample:
-  iterations: 10            # number of root spans to emit
+  iterations: 10
 ```
 
-> **Endpoint:** `127.0.0.1:4317` is the default OTLP/gRPC endpoint used by this
-> sample. `127.0.0.1` means localhost and `4317` is the standard OTLP/gRPC port.
-> Update this value if your OpenTelemetry collector is running at a different
-> host or port.
->
-> **Endpoint format:** `host:port` with no scheme prefix —
-> `127.0.0.1:4317`, **not** `grpc://127.0.0.1:4317`.
+| Collector | Default OTLP/gRPC port | Example endpoint |
+|---|---|---|
+| Instana Agent | `4317` | `192.168.1.10:4317` |
+| OpenTelemetry Collector | `4317` (standard) or `24317` (common alternative) | `192.168.1.10:24317` |
+
+> The sample was tested with the Instana Agent on `localhost:4317` and the
+> OpenTelemetry Collector on `localhost:24317`  -  both on the same machine as
+> the application. Replace `localhost` with the actual IP address if your
+> collector is on a different host.
+
+If `config.yaml` is not found the application falls back to `localhost:4317`
+with 5 iterations.
 
 ---
 
-## Build
+## Step 3  -  Build and run
 
-Set `OTEL_INSTALL` to the directory where you extracted the [IDOT package](https://link-to-idot-package),
-then follow the steps for your platform.
+Run all commands from the `idot-cpp-sample` directory.
 
 ### Linux
 
 ```bash
-export OTEL_INSTALL=/path/to/otel-package
-
-# 1. Configure
+# Configure
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=$OTEL_INSTALL
 
-# 2. Build
+# Build
 cmake --build build -j$(nproc)
 
-# 3. Run
+# Run
 LD_LIBRARY_PATH=$OTEL_INSTALL/lib64 ./build/otel-sample
 ```
 
 ### AIX
 
-On AIX, set `OBJECT_MODE=64` before configuring to ensure the 64-bit toolchain
-is used throughout the build.
+`OBJECT_MODE=64` selects the 64-bit toolchain and must be set before configuring.
 
 ```bash
-export OTEL_INSTALL=/path/to/otel-package
-export OBJECT_MODE=64          # required on AIX — select 64-bit object mode
+export OBJECT_MODE=64
 
-# 1. Configure
+# Configure
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=$OTEL_INSTALL
 
-# 2. Build
+# Build
 cmake --build build -j$(nproc)
 
-# 3. Run
+# Run
 LIBPATH=$OTEL_INSTALL/lib64 ./build/otel-sample
 ```
 
-> Run from the repository root so the binary can locate `config.yaml` in the
-> current working directory.
+### Windows
+
+Open **Developer PowerShell for VS 2022** (*Start → Visual Studio 2022 → Developer PowerShell for VS 2022*).
+
+`opentelemetry_cpp.dll` is copied next to the executable automatically after
+each build. The OpenSSL DLLs must also be on `PATH` before running.
+
+```powershell
+# Configure
+cmake -B build -DCMAKE_PREFIX_PATH="$env:OTEL_INSTALL" -A x64
+
+# Build
+cmake --build build --config Release
+
+# Add OpenSSL to PATH (adjust to your installation)
+$env:PATH = "C:\Program Files\OpenSSL-Win64\bin;$env:PATH"
+
+# Run
+.\build\Release\otel-sample.exe
+```
 
 ---
 
@@ -108,47 +141,52 @@ LIBPATH=$OTEL_INSTALL/lib64 ./build/otel-sample
 =========================================
 Service   : otel-sample
 Version   : 1.0
-Endpoint  : 127.0.0.1:4317
+Endpoint  : localhost:4317
 Iterations: 10
 
 [1/10] Processing order...
 [2/10] Processing order...
-[3/10] Processing order...
-[4/10] Processing order...
-[5/10] Processing order...
-[6/10] Processing order...
-[7/10] Processing order...
-[8/10] Processing order...
-[9/10] Processing order...
+...
 [10/10] Processing order...
 
 Telemetry export completed successfully.
 ```
 
+Spans appear in the collector immediately after the run completes.
+
 ---
 
-## Instana UI screenshots
+## Sample traces
 
-### Total calls
+### IBM Instana
 
-![Instana total calls view](images/total-calls.jpg)
+#### Service summary
 
-### Calls view
+![Instana service summary](images/total-calls.jpg)
 
-![Instana calls view](images/calls.jpg)
+#### Calls view
 
-### Trace details
+![Instana calls view with trace timeline](images/calls.jpg)
 
-![Instana trace details view](images/trace-details.jpg)
+#### Trace details
+
+![Instana trace details with resource attributes](images/trace-details.jpg)
+
+### OpenTelemetry Collector
+
+#### Service summary
+
+![Service summary showing otel-sample calls and latency](images/otel_collector_calls.jpg)
+
+#### Trace detail
+
+![Trace detail showing Process Order with six child spans](images/otel_collector_traces.jpg)
 
 ---
 
 ## What the sample demonstrates
 
-### Trace hierarchy
-
-Each iteration emits one root span (`Process Order`, kind `SERVER`) with six
-sequential child spans:
+Each iteration emits one root span with six sequential child spans:
 
 ```
 Process Order              SERVER    ~150 ms
@@ -160,44 +198,30 @@ Process Order              SERVER    ~150 ms
 └── Send Notification      CLIENT     10 ms   notification.type=email
 ```
 
-Resource attributes attached to every exported span:
+Resource attributes attached to every span:
 
 | Attribute | Value |
 |---|---|
-| `service.name` | value from `config.yaml` |
-| `service.version` | value from `config.yaml` |
-| `host.name` | resolved at runtime via `gethostname()` |
-| `process.pid` | resolved at runtime via `getpid()` |
+| `service.name` | from `config.yaml` |
+| `service.version` | from `config.yaml` |
+| `host.name` | `gethostname()` at startup |
+| `process.pid` | `getpid()` (Linux/AIX) or `GetCurrentProcessId()` (Windows) |
+| `telemetry.sdk.language` | `cpp` (set automatically by the SDK) |
 
-### OpenTelemetry concepts demonstrated
+OpenTelemetry concepts used in `src/main.cpp`:
 
-| Concept | Where in `src/main.cpp` |
+| Concept | Where |
 |---|---|
 | `TracerProvider` + `Resource` | `InitTelemetry()` |
 | OTLP/gRPC exporter | `OtlpGrpcExporterFactory::Create()` |
 | `SimpleSpanProcessor` | `SimpleSpanProcessorFactory::Create()` |
 | Semantic conventions | `semconv::service::kServiceName` |
 | Span start / end | `tracer->StartSpan()` / `span->End()` |
-| Span kinds | `SpanKind::kServer`, `kClient`, `kProducer`, `kInternal` |
+| Span kinds | `kServer`, `kClient`, `kProducer`, `kInternal` |
 | Span attributes | `span->SetAttribute()` |
 | Span events | `root->AddEvent()` |
 | Context propagation | `trace::Scope` + `ChildOpts()` |
-| Graceful shutdown | `ForceFlush()` + `Shutdown()` + `NoopTracerProvider` reset |
-
----
-
-## Linking model
-
-The sample links against **one target only**:
-
-```cmake
-target_link_libraries(otel-sample PRIVATE
-    opentelemetry-cpp::opentelemetry_cpp)   # → libopentelemetry_cpp.so
-```
-
-All API, SDK, exporter, and transport code — including gRPC, Protobuf,
-and Abseil — is bundled inside the unified `.so`. No other libraries need
-to be linked. See `CMakeLists.txt` for the complete build recipe.
+| Graceful shutdown | `ForceFlush()` + `Shutdown()` + `NoopTracerProvider` |
 
 ---
 
@@ -205,20 +229,18 @@ to be linked. See `CMakeLists.txt` for the complete build recipe.
 
 ```
 idot-cpp-sample/
-├── CMakeLists.txt    — find_package(opentelemetry-cpp COMPONENTS ext_so)
-├── config.yaml       — runtime configuration (endpoint, iterations, …)
-├── README.md         — this file
+├── CMakeLists.txt     -  build definition; selects ext_dll (Windows) or ext_so (Linux/AIX)
+├── config.yaml        -  runtime configuration (endpoint, iterations, …)
+├── README.md          -  this file
 └── src/
-    └── main.cpp      — single source file (~260 lines)
+    └── main.cpp       -  single source file
 ```
 
 ---
 
 ## Notes
 
-- **`SimpleSpanProcessor`** exports each span synchronously on `span->End()`.
-  Production services typically use `BatchSpanProcessor` instead to avoid
-  blocking the calling thread on every export.
-- If `config.yaml` is not found, the application falls back to compiled-in
-  defaults (`localhost:4317`, 5 iterations).
-- The `OBJECT_MODE=64` variable is AIX-specific and has no effect on Linux.
+- **`SimpleSpanProcessor`** sends each span synchronously on `span->End()`.
+  For production use, switch to `BatchSpanProcessor` to avoid blocking the
+  calling thread on every export.
+- **`OBJECT_MODE=64`** is AIX-specific and has no effect on other platforms.
