@@ -1,15 +1,12 @@
-FROM azul/zulu-openjdk:11 AS nginx-tracing-client-app-build
+FROM azul/zulu-openjdk-alpine:11 AS nginx-tracing-client-app-build
 
-ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update -y && apt-get install -y --no-install-recommends --no-install-suggests \
-    curl \
-    ca-certificates
+RUN apk add --no-cache curl ca-certificates
 
 WORKDIR /opt/client-app/
 COPY . .
-RUN ./mvnw clean package
+RUN ./mvnw clean package -DforkCount=0
 
-FROM azul/zulu-openjdk:11-jre
+FROM azul/zulu-openjdk-alpine:11-jre
 
 VOLUME /tmp
 WORKDIR /opt/client-app/

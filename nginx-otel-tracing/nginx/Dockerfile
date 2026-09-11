@@ -1,11 +1,7 @@
 # ─── Stage 1: Download Instana NGINX OTel tracing .so files ─────────────────
-FROM ubuntu:24.04 AS tracing_dependencies
+FROM alpine:3.20 AS tracing_dependencies
 
-RUN set -x \
-  && apt-get update \
-  && apt-get install --no-install-recommends --no-install-suggests -y \
-       curl ca-certificates unzip lynx \
-  && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache curl ca-certificates unzip lynx
 
 # Instana Artifactory credentials — pass as build-args or override below.
 # The download key takes precedence over the agent key when both are set.
@@ -14,8 +10,8 @@ ARG INSTANA_AGENT_KEY=instana_otel_downloadkey
 
 # NGINX version must match the version installed in the runtime stage exactly.
 ARG NGINX_VERSION=1.28.0
-# For Alpine-based images change to 'musl'; ubuntu:24.04 uses glibc.
-ARG LIBC_VERSION=glibc
+# Alpine uses musl libc.
+ARG LIBC_VERSION=musl
 
 ENV ARTI_PATH=https://artifact-public.instana.io/artifactory/shared/com/instana/nginx_otel/
 
@@ -42,37 +38,10 @@ RUN set -x; \
     mv "nginx-${NGINX_VERSION}-otel_ssl3x.so"   /opt/instana/nginx/ngx_otel_module_ssl3x.so
 
 # ─── Stage 2: Runtime image ──────────────────────────────────────────────────
-FROM ubuntu:24.04
+FROM nginx:1.28.0-alpine
 
-ARG NGINX_VERSION=1.28.0
-
-# Install system dependencies and add the official nginx.org repositories.
-# Using apt-key add (legacy trusted keyring) — matches the confirmed-working
-# pattern from the reference Dockerfile.
-RUN set -x \
-  && apt-get update \
-  && apt-get install --no-install-recommends --no-install-suggests -y \
-       curl apt-transport-https ca-certificates gnupg2 lsb-release openssl \
-  && echo "deb http://nginx.org/packages/mainline/ubuntu/ $(lsb_release -sc) nginx" \
-       >> /etc/apt/sources.list \
-  && echo "deb http://nginx.org/packages/ubuntu/ $(lsb_release -sc) nginx" \
-       >> /etc/apt/sources.list \
-  && curl -fsSL https://nginx.org/keys/nginx_signing.key | apt-key add - \
-  && apt-get update
-
-# Pin NGINX to the exact version whose ABI the tracing .so was compiled against.
-# apt-cache madison format: "nginx | <version> | <repo-url>"
-# cut -d'|' -f2 extracts the version column; grep does a substring match so
-# "1.28.0" matches "1.28.0-2~noble" (or any patch suffix the repo uses).
-RUN set -x; \
-    nginx_ver="$(apt-cache madison nginx | cut -d'|' -f2 \
-        | tr -d '[:blank:]' | grep --fixed-strings "${NGINX_VERSION}" | head -1)"; \
-    [ -z "$nginx_ver" ] && { echo "ERROR: NGINX ${NGINX_VERSION} not found in repo" >&2; exit 1; }; \
-    apt-get install --no-install-recommends --no-install-suggests -y "nginx=${nginx_ver}"; \
-    rm -f /etc/nginx/nginx.conf && rm -rf /etc/nginx/conf.d; \
-    rm -rf /var/lib/apt/lists/*; \
-    # Verify the binary is present at the expected path before the build succeeds.
-    test -x /usr/sbin/nginx || { echo "ERROR: /usr/sbin/nginx not found after install" >&2; exit 1; }
+# Install openssl for SSL variant detection at build time.
+RUN apk add --no-cache openssl libstdc++ libgcc
 
 # Copy both SSL-variant .so files from stage 1.
 COPY --from=tracing_dependencies /opt/instana/nginx/ngx_otel_module_ssl1.1x.so \
@@ -80,10 +49,13 @@ COPY --from=tracing_dependencies /opt/instana/nginx/ngx_otel_module_ssl1.1x.so \
 COPY --from=tracing_dependencies /opt/instana/nginx/ngx_otel_module_ssl3x.so \
                                   /usr/local/lib/instana/ngx_otel_module_ssl3x.so
 
+# Remove default nginx config so custom configs can be mounted/copied in.
+RUN rm -f /etc/nginx/nginx.conf && rm -rf /etc/nginx/conf.d
+
 # Detect the OpenSSL version baked into this image and create a fixed-path
 # symlink at build time. nginx.conf always loads ngx_otel_module.so and never
 # needs to know which SSL variant it points at.
-# ubuntu:24.04 → OpenSSL 3.x → ssl3x variant selected.
+# nginx:alpine typically ships OpenSSL 3.x → ssl3x variant selected.
 RUN set -x; \
     ssl_ver=$(openssl version | awk '{print $2}'); \
     case "$ssl_ver" in \
