@@ -17,8 +17,8 @@ IDOT C++ library.
 |---|---|
 | C++17 compiler | GCC 9+ or Clang 10+ (Linux); IBM XL C/C++ or GCC (AIX); MSVC 2019+ (Windows) |
 | CMake 3.16+ | `cmake --version` |
-| [IDOT package](https://link-to-idot-package) | Download and extract to a directory of your choice |
-| OpenSSL 3 | Required on all platforms - `libopentelemetry_cpp` links against it at runtime. Linux/AIX: install via the system package manager (`openssl-libs` / `openssl`). Windows: add `libssl-3-x64.dll` / `libcrypto-3-x64.dll` to `PATH` - available from [Win64 OpenSSL](https://slproweb.com/products/Win32OpenSSL.html) or bundled with Git for Windows. |
+| [IDOT package](https://na.artifactory.swg-devops.com/artifactory/instana-team-release-staging-sensors-maven-local/com/instana/idot-opentelemetry-cpp/) | Download from Artifactory (`instana-team-release-staging-sensors-maven-local/com/instana/idot-opentelemetry-cpp/`) and extract to any directory on the build host |
+| OTLP Collector / Receiver | [Instana Agent](https://www.ibm.com/docs/en/instana-observability/current?topic=instana-installing-agent) (with OTLP enabled) or any OTLP-compatible collector (such as OpenTelemetry Collector) |
 
 gRPC, Protobuf, and Abseil are statically embedded inside the IDOT library, no other libraries need to be installed.
 
@@ -53,32 +53,24 @@ service:
   version: "1.0"
 
 otlp:
-  endpoint: 192.168.1.10:4317  # host:port of your collector  -  no scheme prefix (not grpc://...)
-  insecure: true               # true = plaintext gRPC (no TLS)
-  timeout_ms: 10000
+  # OTLP/gRPC endpoint format: host:port (no scheme prefix, e.g., 127.0.0.1:4317 or localhost:4317)
+  endpoint: <OTLP_GRPC_ENDPOINT>
+  insecure: true            # true = plaintext gRPC (no TLS)
+  timeout_ms: 10000         # export timeout in milliseconds
 
 sample:
   iterations: 10
 ```
 
-| Collector | Default OTLP/gRPC port | Example endpoint |
-|---|---|---|
-| Instana Agent | `4317` | `192.168.1.10:4317` |
-| OpenTelemetry Collector | `4317` (standard) or `24317` (common alternative) | `192.168.1.10:24317` |
-
-> The sample was tested with the Instana Agent on `localhost:4317` and the
-> OpenTelemetry Collector on `localhost:24317`  -  both on the same machine as
-> the application. Replace `localhost` with the actual IP address if your
-> collector is on a different host.
-
-If `config.yaml` is not found the application falls back to `localhost:4317`
-with 5 iterations.
+> **Endpoint format:** `host:port` with no scheme prefix —
+> `127.0.0.1:4317`, **not** `grpc://127.0.0.1:4317`.
 
 ---
 
 ## Step 3  -  Build and run
 
-Run all commands from the `idot-cpp-sample` directory.
+Set `OTEL_INSTALL` to the directory where you extracted the [IDOT package](https://na.artifactory.swg-devops.com/artifactory/instana-team-release-staging-sensors-maven-local/com/instana/idot-opentelemetry-cpp/),
+then follow the steps for your platform.
 
 ### Linux
 
@@ -106,8 +98,8 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=$OTEL_INSTALL
 # Build
 cmake --build build -j$(nproc)
 
-# Run
-LIBPATH=$OTEL_INSTALL/lib64 ./build/otel-sample
+# 3. Run
+LIBPATH=$OTEL_INSTALL/lib ./build/otel-sample
 ```
 
 ### Windows
@@ -156,7 +148,15 @@ Spans appear in the collector immediately after the run completes.
 
 ---
 
-## Sample traces
+## Viewing traces in Instana
+
+The sample sends spans via OTLP/gRPC to port `4317`. Configure the
+[Instana Agent](https://www.ibm.com/docs/en/instana-observability/current?topic=instana-installing-agent)
+or any OTLP-compatible collector (such as OpenTelemetry Collector) as the receiver, then navigate to **Instana UI → Analytics → Traces**.
+
+---
+
+## Instana UI screenshots
 
 ### IBM Instana
 

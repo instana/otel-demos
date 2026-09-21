@@ -3,7 +3,8 @@ service:
   version: "1.0"
 
 otlp:
-  endpoint: localhost:4317
+  # OTLP/gRPC endpoint format: host:port (no scheme prefix, e.g., 127.0.0.1:4317 or localhost:4317)
+  endpoint: <OTLP_GRPC_ENDPOINT>
   insecure: true
   timeout_ms: 10000
 
