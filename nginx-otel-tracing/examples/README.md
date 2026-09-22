@@ -98,36 +98,26 @@ Send 100 requests and count the responses where `X-Sampled: on` appears.
 
 ### Ratio-based by session ID (`nginx.ratio-session-id.conf`)
 
-`split_clients` hashes the value of a session cookie so that every request
-belonging to a given session receives an identical sampling decision for the
-duration of that session.
+A configurable percentage of user sessions are sampled. The `split_clients`
+directive hashes the value of a session cookie, so a given session is either
+always traced or never traced for the duration of that session.
 
-Replace `$cookie_sessionid` in the `split_clients` directive with the cookie
-name your application uses:
-
-| Cookie variable | Framework |
-|-----------------|-----------|
-| `$cookie_JSESSIONID` | Spring Boot / Apache Tomcat |
-| `$cookie_SESSION` | Spring Session |
-| `$cookie_PHPSESSID` | PHP |
-| `$cookie_connect.sid` | Node.js / Express |
-
-If a request carries no session cookie, the empty string is hashed to a fixed
-bucket and the result is deterministic (consistently `on` or `off`). For
-cookie-free clients, use ratio-based sampling by trace ID instead.
+Replace `$cookie_sessionid` with the cookie name your application uses. Common
+values are `$cookie_JSESSIONID` for Spring Boot and Tomcat, and `$cookie_SESSION`
+for Spring Session. If a request carries no session cookie, the empty string is
+hashed to a fixed bucket and the result is deterministic.
 
 The default configuration samples **10 %** of sessions. Adjust the percentage in
 the `split_clients` block to change the rate.
 
-**Verify:** temporarily add the following inside the `location /` block, then
-remove it after testing:
+If the client does not send session cookies, use
+[ratio-based sampling by trace ID](#ratio-based-by-trace-id-nginxratio-trace-idconf)
+instead.
 
-```nginx
-add_header X-Sampled $session_sampler always;
-```
-
-Use `curl -b "sessionid=<value>"` with different cookie values and confirm that
-the same cookie value consistently returns the same `X-Sampled` header.
+**Verify:** temporarily add `add_header X-Sampled $session_sampler always;`
+inside the `location` block. Use `curl -b "sessionid=<value>"` with different
+cookie values to confirm that the same cookie value consistently returns the same
+sampling decision. Remove the debug header after testing.
 
 ---
 
