@@ -145,3 +145,19 @@ The NGINX OTel module uses `otel_trace_context propagate` which:
 1. **Extracts** the W3C `traceparent` injected by the Instana Java traces on `client-app`
 2. Creates a **child span** under the client's trace (same traceId, new NGINX spanId)
 3. **Injects** a new `traceparent` carrying NGINX's spanId into the upstream request to `server-app`
+
+## Sampling Examples
+
+The [`examples/`](examples/) directory contains ready-to-use `nginx.conf` files
+that demonstrate each sampling strategy supported by the NGINX OTel module:
+
+| File | Strategy |
+|------|----------|
+| [`examples/nginx.always-on.conf`](examples/nginx.always-on.conf) | Always-on — every request is traced |
+| [`examples/nginx.always-off.conf`](examples/nginx.always-off.conf) | Always-off — tracing suppressed for a specific location |
+| [`examples/nginx.ratio-trace-id.conf`](examples/nginx.ratio-trace-id.conf) | Ratio-based by trace ID — consistent per-trace decision |
+| [`examples/nginx.ratio-session-id.conf`](examples/nginx.ratio-session-id.conf) | Ratio-based by session ID — consistent per-session decision |
+| [`examples/nginx.parent-based.conf`](examples/nginx.parent-based.conf) | Parent-based — decision delegated to the upstream caller |
+
+See [`examples/README.md`](examples/README.md) for a full explanation of each
+strategy, the built-in OTel variables, and verification steps.
