@@ -28,16 +28,17 @@ idot-cpp-sample/
 
 | Requirement | Notes |
 |---|---|
-| C++17 compiler | GCC 9+ or Clang 10+ (Linux); IBM XL C/C++ or GCC (AIX); MSVC 2019+ (Windows) |
+| C++17 compiler | GCC 9+ or Clang 10+ (Linux); IBM Open XL C/C++ V17.1.3+ (AIX); MSVC 2019+ (Windows) |
 | CMake 3.16+ | `cmake --version` |
-| [IDOT package](https://artifact-public.instana.io/artifactory/rel-generic-instana-virtual/com/instana/idot-opentelemetry-cpp/1.26.0/idot-opentelemetry-cpp-1.26.0-bin.tar.gz) | Download from [Artifactory](https://artifact-public.instana.io/artifactory/rel-generic-instana-virtual/com/instana/idot-opentelemetry-cpp/1.26.0/idot-opentelemetry-cpp-1.26.0-bin.tar.gz) (see [Step 1](#step-1----download-and-extract-the-idot-package)). |
+| IDOT package | Download from [Artifactory](https://artifact-public.instana.io/artifactory/rel-generic-instana-virtual/com/instana/idot-opentelemetry-cpp/1.26.0/idot-opentelemetry-cpp-1.26.0-bin.tar.gz) and extract on your host machine (see [Step 1](#step-1---download-and-extract-the-idot-package)). |
+| Instana Agent Key | Required to download the IDOT package from Artifactory |
 | OTLP Collector / Receiver | [Instana Agent](https://www.ibm.com/docs/en/instana-observability/current?topic=instana-installing-agent) (with OTLP enabled) or any OTLP-compatible collector (such as OpenTelemetry Collector) |
 
 gRPC, Protobuf, and Abseil are statically embedded inside the IDOT library, no other libraries need to be installed.
 
 ---
 
-## Step 1  -  Download and extract the IDOT package
+## Step 1 - Download and extract the IDOT package
 
 1. Download the idot-opentelemetry-cpp package from [Artifactory](https://artifact-public.instana.io/artifactory/rel-generic-instana-virtual/com/instana/idot-opentelemetry-cpp/1.26.0/idot-opentelemetry-cpp-1.26.0-bin.tar.gz).
 
@@ -69,7 +70,7 @@ $env:OTEL_INSTALL = "<path-to-extracted-idot-package>"
 
 ---
 
-## Step 2  -  Edit `config.yaml`
+## Step 2 - Edit `config.yaml`
 
 Set the `endpoint` to the host and port of your collector. Use the IP address
 of the machine running the collector  -  `localhost` only works if the collector
@@ -95,7 +96,7 @@ sample:
 
 ---
 
-## Step 3  -  Build and run
+## Step 3 - Build and run
 
 Set `OTEL_INSTALL` to the directory where you extracted the IDOT package,
 then follow the steps for your platform.
