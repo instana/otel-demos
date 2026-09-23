@@ -11,32 +11,60 @@ IDOT C++ library.
 
 ---
 
+## Project structure
+
+```
+idot-cpp-sample/
+├── CMakeLists.txt     -  build definition; selects ext_dll (Windows) or ext_so (Linux/AIX)
+├── config.yaml        -  runtime configuration (endpoint, iterations, …)
+├── README.md          -  this file
+└── src/
+    └── main.cpp       -  single source file
+```
+
+---
+
 ## Prerequisites
 
 | Requirement | Notes |
 |---|---|
 | C++17 compiler | GCC 9+ or Clang 10+ (Linux); IBM XL C/C++ or GCC (AIX); MSVC 2019+ (Windows) |
 | CMake 3.16+ | `cmake --version` |
-| [IDOT package](https://na.artifactory.swg-devops.com/artifactory/instana-team-release-staging-sensors-maven-local/com/instana/idot-opentelemetry-cpp/) | Download from Artifactory (`instana-team-release-staging-sensors-maven-local/com/instana/idot-opentelemetry-cpp/`) and extract to any directory on the build host |
+| [IDOT package](https://artifact-public.instana.io/artifactory/rel-generic-instana-virtual/com/instana/idot-opentelemetry-cpp/1.26.0/idot-opentelemetry-cpp-1.26.0-bin.tar.gz) | Download from [Artifactory](https://artifact-public.instana.io/artifactory/rel-generic-instana-virtual/com/instana/idot-opentelemetry-cpp/1.26.0/idot-opentelemetry-cpp-1.26.0-bin.tar.gz) (see [Step 1](#step-1----download-and-extract-the-idot-package)). |
 | OTLP Collector / Receiver | [Instana Agent](https://www.ibm.com/docs/en/instana-observability/current?topic=instana-installing-agent) (with OTLP enabled) or any OTLP-compatible collector (such as OpenTelemetry Collector) |
 
 gRPC, Protobuf, and Abseil are statically embedded inside the IDOT library, no other libraries need to be installed.
 
 ---
 
-## Step 1  -  Extract the IDOT package
+## Step 1  -  Download and extract the IDOT package
 
-Extract the downloaded IDOT package and point `OTEL_INSTALL` at it.
-All subsequent steps use this variable.
+1. Download the idot-opentelemetry-cpp package from [Artifactory](https://artifact-public.instana.io/artifactory/rel-generic-instana-virtual/com/instana/idot-opentelemetry-cpp/1.26.0/idot-opentelemetry-cpp-1.26.0-bin.tar.gz).
+
+   > **Note:** To download the file, use the following credentials:
+   > - **Username:** Underscore (`_`)
+   > - **Password:** A valid agent key
+
+2. Extract the downloaded `.tar.gz` file to a temporary location. After extraction, find five platform-specific packages in the directory:
+
+   | Platform | Artifact filename |
+   |----------|-------------------|
+   | Linux x86_64 | `idot-opentelemetry-cpp-1.26.0-xLinux_64bit.tar.gz` |
+   | Linux ppc64le | `idot-opentelemetry-cpp-1.26.0-pLinuxle_64bit.tar.gz` |
+   | Linux s390x | `idot-opentelemetry-cpp-1.26.0-zLinux_64bit.tar.gz` |
+   | AIX ppc64 | `idot-opentelemetry-cpp-1.26.0-aix_64bit.tar.gz` |
+   | Windows x86_64 | `idot-opentelemetry-cpp-1.26.0-win_64bit.zip` |
+
+3. Extract the platform-specific archive for your target system and point `OTEL_INSTALL` to the extracted directory path.
 
 **Linux / AIX**
 ```bash
-export OTEL_INSTALL=/opt/otel-pkg
+export OTEL_INSTALL=<path-to-extracted-idot-package>
 ```
 
 **Windows (Developer PowerShell for VS 2022)**
 ```powershell
-$env:OTEL_INSTALL = "C:\otel-pkg"
+$env:OTEL_INSTALL = "<path-to-extracted-idot-package>"
 ```
 
 ---
@@ -69,7 +97,7 @@ sample:
 
 ## Step 3  -  Build and run
 
-Set `OTEL_INSTALL` to the directory where you extracted the [IDOT package](https://na.artifactory.swg-devops.com/artifactory/instana-team-release-staging-sensors-maven-local/com/instana/idot-opentelemetry-cpp/),
+Set `OTEL_INSTALL` to the directory where you extracted the IDOT package,
 then follow the steps for your platform.
 
 ### Linux
@@ -222,19 +250,6 @@ OpenTelemetry concepts used in `src/main.cpp`:
 | Span events | `root->AddEvent()` |
 | Context propagation | `trace::Scope` + `ChildOpts()` |
 | Graceful shutdown | `ForceFlush()` + `Shutdown()` + `NoopTracerProvider` |
-
----
-
-## Project structure
-
-```
-idot-cpp-sample/
-├── CMakeLists.txt     -  build definition; selects ext_dll (Windows) or ext_so (Linux/AIX)
-├── config.yaml        -  runtime configuration (endpoint, iterations, …)
-├── README.md          -  this file
-└── src/
-    └── main.cpp       -  single source file
-```
 
 ---
 
