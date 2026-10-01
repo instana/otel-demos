@@ -44,20 +44,19 @@ agent_endpoint=<local ip or remote host; e.g. ingress-red-saas.instana.io>
 agent_endpoint_port=<443 already set as default; or 4443 for local>
 
 # IDOT config:
-INSTANA_OTEL_ENDPOINT_HTTP=<Instana OTLP HTTP endpoint; e.g. https://otlp-red-saas.instana.io:4318
+INSTANA_OTEL_ENDPOINT_HTTP=<Instana OTLP HTTP endpoint; e.g. https://otlp-red-saas.instana.io:4318>
 INSTANA_HOST_NAME=<hostname used to identify collector entities>
-INSTANA_HOST_ID=<host machine-id, used to stamp OTel spans with host.id>
+INSTANA_HOST_ID=<"Host ID" on Instana UI Infra Map, stamps OTel spans with host.id, likely 02:42:ac:ff:fe:1c:00:1e here>
 ```
 
-The host's `/etc/machine-id` file is bind-mounted (read-only) into the OTel collector container:
+Details: `INSTANA_HOST_ID` is used for Infrastructure correlation on Instana UI.
+It has to be the same as the Instana agent reported "Host ID" on the infrastructure map on Instana UI.
+Usually, the EUI-64 MAC address of the virtual Ethernet device of the instana-agent container
+is used here. An IPv4 address can be converted to EUI-64 (IP 172.28.0.30 becomes 02:42:ac:ff:fe:1c:00:1e).
 
-```yaml
-/etc/machine-id:/etc/machine-id:ro
-```
-
-The Instana agent is also configured with `pid: "host"` and `privileged: true` in `docker-compose.yml`,
-which allows it to read the same `/etc/machine-id` directly and report the identical `host.id`.
-The Instana backend therefore receives the same `host.id` from both the OTel collector and the agent,
+The Instana agent is configured with `privileged: true` and static IPv4 address in `docker-compose.yml`,
+which allows it to read the same container MAC address directly and report the identical `host.id`.
+The Instana backend receives the same `host.id` from both the OTel collector and the agent,
 confirming they are running on the same host and merging them into a single infrastructure entity.
 
 ## Build & Launch
