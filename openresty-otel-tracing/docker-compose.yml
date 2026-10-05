@@ -5,7 +5,8 @@ services:
     build:
       context: ./client-app
     networks:
-      - openrestymesh
+      openrestymesh:
+        ipv4_address: 172.28.0.10
     environment:
       - target_url=http://openresty:10080/openresty-otel-demo
       - INSTANA_AGENT_HOST=instana-agent
@@ -15,7 +16,8 @@ services:
     build:
       context: ./client-app
     networks:
-      - openrestymesh
+      openrestymesh:
+        ipv4_address: 172.28.0.11
     environment:
       - target_url=http://openresty:10080/lua-otel-demo
       - INSTANA_AGENT_HOST=instana-agent
@@ -38,6 +40,7 @@ services:
       - ./openresty/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
     networks:
       openrestymesh:
+        ipv4_address: 172.28.0.20
         aliases:
           - openresty
     expose:
@@ -48,6 +51,7 @@ services:
       context: ./server-app
     networks:
       openrestymesh:
+        ipv4_address: 172.28.0.40
         aliases:
           - server-app
     environment:
@@ -74,6 +78,7 @@ services:
       - ./agent/logs:/opt/instana/agent/data/log
     networks:
       openrestymesh:
+        ipv4_address: 172.28.0.30
         aliases:
           - instana-agent
     environment:
@@ -99,12 +104,9 @@ services:
       - ./collector/config.yaml:/etc/instana-otelcol/config.yaml:ro
       - /var/log:/var/log:ro
       - ./collector/logs:/collector/logs
-      # Expose the host machine-id so the collector can stamp spans with host.id,
-      # which the Instana backend uses to correlate OTel entities with the
-      # agent-managed host (the agent also reads /etc/machine-id via pid:host).
-      - /etc/machine-id:/etc/machine-id:ro
     networks:
       openrestymesh:
+        ipv4_address: 172.28.0.50
         aliases:
           - instana-collector
     expose:
@@ -119,4 +121,7 @@ services:
       - INSTANA_HOST_ID=${INSTANA_HOST_ID}
 
 networks:
-  openrestymesh: {}
+  openrestymesh:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
