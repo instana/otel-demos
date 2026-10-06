@@ -1,6 +1,6 @@
 # IDOT OpenTelemetry C++ — Distributed Tracing Demo
 
-This sample shows how a C++ application instrumented with the **IDOT OpenTelemetry C++ library** participates in a distributed trace alongside Java services.
+This sample shows how a C++ application instrumented with the **IDOT OpenTelemetry C++ library** participates in an end-to-end distributed trace with Java services.
 
 The C++ service uses the IDOT library for manual instrumentation. The Java services use automatic instrumentation provided by the agent attached to their JVMs. The services participate in the same distributed trace by propagating the W3C traceparent context between services.
 
@@ -42,7 +42,7 @@ The focus is [`cpp-service/src/main.cpp`](cpp-service/src/main.cpp). It demonstr
 - **Inject** a `traceparent` header into the outgoing call to `java-receiver`
 - **Shut down** gracefully with `ForceFlush` to ensure all spans are exported
 
-The Java services require no manual instrumentation — they are plain Spring Boot applications that the auto-instrumentation agent instruments automatically.
+The Java services are plain Spring Boot applications and require no manual instrumentation. The agent instruments them automatically.
 
 > **Note on simulated spans:** `ReadCustomerDB`, `ChargePayment`, and `PublishShipment` do not connect to real external systems. They are included to demonstrate the correct OpenTelemetry semantic attributes for database, RPC, and messaging operations.
 
@@ -61,7 +61,7 @@ java-caller   GET /order                        SERVER  (auto-instrumented)
    ├─ cpp-service  ChargePayment                CLIENT   (simulated)
    ├─ cpp-service  UpdateInventory              INTERNAL
    ├─ cpp-service  PublishShipment              PRODUCER (simulated)
-   └─ cpp-service  HTTP GET …:8081/ping         CLIENT
+   └─ cpp-service  HTTP GET /ping               CLIENT
       │
       └─ java-receiver  GET /ping               SERVER   (auto-instrumented)
 ```
@@ -102,7 +102,7 @@ idot-cpp-distributed-tracing/
 | IDOT OpenTelemetry C++ package | Extracted at `<path-to-idot-package>` — set via `IDOT_INSTALL` env var |
 | Java 8+ | `java -version` |
 | Maven 3.6+ | `mvn --version` |
-| OpenTelemetry Collector or Instana Agent | Accepting OTLP/gRPC on port `4317` |
+| OpenTelemetry Collector or Instana Agent | OTLP/gRPC endpoint available on port `4317` |
 
 ---
 
@@ -163,6 +163,18 @@ Open your trace backend and search for service `cpp-service` or the `ProcessOrde
 
 ---
 
+## What to verify
+
+After triggering a request, verify that:
+
+- `java-caller`, `cpp-service`, and `java-receiver` appear in the same trace.
+- The C++ spans are created by the IDOT OpenTelemetry C++ library.
+- The `traceparent` context is propagated from Java → C++ → Java.
+- The `ProcessOrder` span contains the child spans shown in the span tree above.
+- The trace is exported through OTLP/gRPC to the configured backend.
+
+---
+
 ## Step 5 — Stop
 
 ```bash
@@ -187,7 +199,10 @@ Restart the agent, then point the demo at it:
 CPP_OTLP_ENDPOINT=<agent-host>:4317 ./run.sh
 ```
 
-The Instana Agent instruments the Java services via JVM auto-attach — no `-javaagent` flag is needed when running locally with the agent present. The Dockerfiles in this repo use the OTel Java Agent for standalone container use where no Instana Agent is available.
+Two instrumentation modes are supported for the Java services:
+
+- **Instana Agent mode** — when the Instana Agent is running locally, it instruments the Java services via JVM auto-attach. No `-javaagent` flag is needed.
+- **Standalone OTel mode** — the Dockerfiles in this repo use the OpenTelemetry Java Agent directly, for environments where no Instana Agent is present.
 
 ### View in Instana UI
 
