@@ -148,11 +148,15 @@ Expected response:
 order processed — notify: pong
 ```
 
-To generate continuous traffic (one request every 5 seconds):
+To stop continuous traffic and trigger traces manually instead:
 
 ```bash
 ./stop.sh
-SCHEDULE_ENABLED=true ./run.sh
+SCHEDULE_ENABLED=false ./run.sh
+```
+Then trigger individual traces with:
+```bash
+curl http://localhost:8082/order
 ```
 
 ---

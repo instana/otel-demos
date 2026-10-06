@@ -29,7 +29,7 @@ IDOT_INSTALL="${IDOT_INSTALL:-/tmp/opentelemetry-cpp}"
 # cpp-service exports via OTLP/gRPC to this endpoint (any OTel Collector or Instana Agent).
 CPP_OTLP_ENDPOINT="${CPP_OTLP_ENDPOINT:-localhost:4317}"
 # Set SCHEDULE_ENABLED=true to have java-caller fire one request every 5 seconds.
-SCHEDULE_ENABLED="${SCHEDULE_ENABLED:-false}"
+SCHEDULE_ENABLED="${SCHEDULE_ENABLED:-true}"
 LOGS_DIR="$SCRIPT_DIR/logs"
 PIDS_FILE="$SCRIPT_DIR/.pids"
 FOREGROUND="${1:-}"
@@ -55,7 +55,7 @@ echo "  Trigger a trace:  curl http://localhost:8082/order"
 if [[ "$SCHEDULE_ENABLED" == "true" ]]; then
   echo "  Scheduler: enabled (one call every 5 s)"
 else
-  echo "  Scheduler: disabled  (set SCHEDULE_ENABLED=true to enable)"
+  echo "  Scheduler: disabled  (set SCHEDULE_ENABLED=false to disable)"
 fi
 echo ""
 
