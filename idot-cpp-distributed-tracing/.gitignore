@@ -1,0 +1,12 @@
+# CMake build output
+cpp-service/build/
+
+# Maven build output
+java-caller/target/
+java-receiver/target/
+
+# Runtime logs
+logs/*.log
+
+# Runtime PID file
+.pids
