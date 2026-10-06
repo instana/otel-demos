@@ -53,17 +53,17 @@ The Java services are plain Spring Boot applications and require no manual instr
 Each `GET /order` produces a trace waterfall like this:
 
 ```
-java-caller   GET /order                        SERVER  (auto-instrumented)
+java-caller   GET /order                              SERVER  (auto-instrumented)
 │
-└─ cpp-service  ProcessOrder                    SERVER
-   ├─ cpp-service  ValidateOrder                INTERNAL
-   ├─ cpp-service  ReadCustomerDB               CLIENT   (simulated)
-   ├─ cpp-service  ChargePayment                CLIENT   (simulated)
-   ├─ cpp-service  UpdateInventory              INTERNAL
-   ├─ cpp-service  PublishShipment              PRODUCER (simulated)
-   └─ cpp-service  HTTP GET /ping               CLIENT
+└─ cpp-service  ProcessOrder                          SERVER
+   ├─ cpp-service  ValidateOrder                      INTERNAL
+   ├─ cpp-service  ReadCustomerDB                     CLIENT   (simulated)
+   ├─ cpp-service  ChargePayment                      CLIENT   (simulated)
+   ├─ cpp-service  UpdateInventory                    INTERNAL
+   ├─ cpp-service  PublishShipment                    PRODUCER (simulated)
+   └─ cpp-service  HTTP GET http://localhost:8081/ping  CLIENT
       │
-      └─ java-receiver  GET /ping               SERVER   (auto-instrumented)
+      └─ java-receiver  GET /ping                     SERVER   (auto-instrumented)
 ```
 
 ---

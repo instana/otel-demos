@@ -1,8 +1,8 @@
 // =============================================================================
-//  cpp-service  —  IDOT OpenTelemetry C++ library showcase
+//  cpp-service  —  IDOT OpenTelemetry C++ distributed tracing example
 //
 //  This service is the centrepiece of the end-to-end distributed tracing demo.
-//  It demonstrates every major feature of the IDOT OpenTelemetry C++ library:
+//  It demonstrates key IDOT OpenTelemetry C++ tracing features:
 //
 //   TracerProvider + Resource      InitTelemetry()
 //   BatchSpanProcessor             InitTelemetry()   (production-ready export)
@@ -18,17 +18,17 @@
 //  Call flow per request:
 //
 //    java-caller ──traceparent──▶ [Extract]
-//                                  ProcessOrder          SERVER
-//                                  ├─ ValidateOrder      INTERNAL
-//                                  ├─ ReadCustomerDB     CLIENT   (simulated)
-//                                  ├─ ChargePayment      CLIENT   (simulated)
-//                                  ├─ UpdateInventory    INTERNAL
-//                                  ├─ PublishShipment    PRODUCER (simulated)
-//                                  └─ NotifyCustomer     CLIENT
+//                                  ProcessOrder                    SERVER
+//                                  ├─ ValidateOrder                INTERNAL
+//                                  ├─ ReadCustomerDB               CLIENT   (simulated)
+//                                  ├─ ChargePayment                CLIENT   (simulated)
+//                                  ├─ UpdateInventory              INTERNAL
+//                                  ├─ PublishShipment              PRODUCER (simulated)
+//                                  └─ HTTP GET http://…/ping       CLIENT
 //                                          │
 //                                  [Inject traceparent]
 //                                          ▼
-//                              java-receiver (GET /ping)   SERVER
+//                              java-receiver (GET /ping)           SERVER
 //
 // =============================================================================
 
@@ -314,14 +314,10 @@ static std::string CallDownstream(const std::string& url)
 //  1. Extract  — read the incoming W3C traceparent header from java-caller
 //  2. Attach   — make the extracted context active so child spans inherit it
 //  3. SERVER span  — root span for this service's work
-//  4. INTERNAL spans — fine-grained steps inside the service
-//  5. CLIENT span  — outbound call to a database (simulated)
-//  6. PRODUCER span — async message publish with a SpanLink
-//  7. SpanLink — links the async span back to the originating trace
-//  8. Span events — timestamped notes attached to the root span
-//  9. Error span  — shows kError status on a failed step
-// 10. Inject  — write traceparent into the downstream call to java-receiver
-// 11. Detach  — restore the previous context after the request is done
+//  4. Child spans  — INTERNAL, CLIENT, and PRODUCER spans for each step
+//  5. Span events  — timestamped annotations attached to a span
+//  6. Inject   — write traceparent into the downstream call to java-receiver
+//  7. Detach   — restore the previous context after the request is done
 // =============================================================================
 
 static void HandleOrder(const httplib::Request& req, httplib::Response& res)
