@@ -80,7 +80,15 @@ public class ReceiverApplication {
 
         @GetMapping(value = "/ping", produces = MediaType.TEXT_PLAIN_VALUE)
         public String ping(@RequestHeader Map<String, String> headers) {
-            log.info("Received /ping — traceparent: {}", headers.get("traceparent"));
+            String traceparent = headers.get("traceparent");
+            log.info("[java-receiver] Received /ping — traceparent: {}", traceparent);
+            // W3C traceparent format: 00-<traceId>-<parentSpanId>-<flags>
+            if (traceparent != null) {
+                String[] parts = traceparent.split("-");
+                if (parts.length == 4) {
+                    log.info("[java-receiver] Shared trace ID  : {}  parent span ID : {}", parts[1], parts[2]);
+                }
+            }
 
             // Put a message on IBM MQ.
             // The Instana agent auto-instruments this send() call and creates

@@ -30,6 +30,14 @@
       <artifactId>spring-boot-starter-test</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- OTel API — compile-time only; implementation provided at runtime by
+         the opentelemetry-javaagent.jar attached via -javaagent.            -->
+    <dependency>
+      <groupId>io.opentelemetry</groupId>
+      <artifactId>opentelemetry-api</artifactId>
+      <version>1.38.0</version>
+      <scope>provided</scope>
+    </dependency>
   </dependencies>
 
   <build>

@@ -30,6 +30,8 @@ IDOT_INSTALL="${IDOT_INSTALL:-/tmp/opentelemetry-cpp}"
 CPP_OTLP_ENDPOINT="${CPP_OTLP_ENDPOINT:-localhost:4317}"
 # Set SCHEDULE_ENABLED=true to have java-caller fire one request every 5 seconds.
 SCHEDULE_ENABLED="${SCHEDULE_ENABLED:-true}"
+# OTel Java agent — used by java-caller and java-receiver for auto-instrumentation.
+OTEL_AGENT="${OTEL_AGENT:-/tmp/opentelemetry-javaagent.jar}"
 # IBM MQ connection details for java-receiver.
 MQ_HOST="${MQ_HOST:-localhost}"
 MQ_PORT="${MQ_PORT:-1414}"
@@ -93,6 +95,9 @@ start_bg "java-receiver" \
   MQ_CHANNEL="$MQ_CHANNEL" \
   MQ_QUEUE="$MQ_QUEUE" \
   java \
+  -javaagent:"$OTEL_AGENT" \
+  -DOTEL_SERVICE_NAME=java-receiver \
+  -DOTEL_TRACES_EXPORTER=none \
   -jar "$SCRIPT_DIR/java-receiver/target/java-receiver-1.0.0.jar" \
   --server.port=8081
 
@@ -111,6 +116,9 @@ CPP_ENV=(
 )
 JAVA_CALLER_ARGS=(
   java
+  -javaagent:"$OTEL_AGENT"
+  -DOTEL_SERVICE_NAME=java-caller
+  -DOTEL_TRACES_EXPORTER=none
   -DCPP_SERVICE_URL=http://localhost:8080
   -DSCHEDULE_ENABLED="$SCHEDULE_ENABLED"
   -jar "$SCRIPT_DIR/java-caller/target/java-caller-1.0.0.jar"

@@ -1,5 +1,6 @@
 package com.instana.demo;
 
+import io.opentelemetry.api.trace.Span;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -70,8 +71,16 @@ public class CallerApplication {
          */
         @GetMapping(value = "/order", produces = MediaType.TEXT_PLAIN_VALUE)
         public String order() {
+            // The OTel Java agent instruments this method and makes its span the
+            // current span. Span.current() reads the trace/span IDs directly
+            // from the agent's context — no header parsing needed.
+            Span span = Span.current();
+            String traceId = span.getSpanContext().getTraceId();
+            String spanId  = span.getSpanContext().getSpanId();
+            log.info("[java-caller] Root trace ID : {}  span ID : {}", traceId, spanId);
+
             String response = restTemplate.getForObject(cppServiceUrl + "/order", String.class);
-            log.info("Response from C++ service: {}", response);
+            log.info("[java-caller] Response from C++ service: {}", response);
             return response;
         }
     }

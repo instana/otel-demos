@@ -276,6 +276,13 @@ static std::string CallDownstream(const std::string& url)
     propagation::GlobalTextMapPropagator::GetGlobalPropagator()
         ->Inject(carrier, ctx::RuntimeContext::GetCurrent());
 
+    // Log the injected traceparent so the demo audience can verify the same trace ID
+    // is carried forward to java-receiver.
+    for (auto& [k, v] : carrier.headers)
+        if (k == "traceparent")
+            std::cout << "[cpp-service] Injected  traceparent into java-receiver: "
+                      << v << std::endl;
+
     struct curl_slist* hlist = nullptr;
     for (auto& [k, v] : carrier.headers)
         hlist = curl_slist_append(hlist, (k + ": " + v).c_str());
@@ -336,6 +343,14 @@ static void HandleOrder(const httplib::Request& req, httplib::Response& res)
     auto current_ctx = ctx::RuntimeContext::GetCurrent();
     auto parent_ctx  = propagation::GlobalTextMapPropagator::GetGlobalPropagator()
                            ->Extract(in_carrier, current_ctx);
+
+    // Log the incoming traceparent so the demo audience can see the shared trace ID.
+    auto incoming_tp = req.headers.find("traceparent");
+    if (incoming_tp != req.headers.end())
+        std::cout << "[cpp-service] Extracted traceparent from java-caller : "
+                  << incoming_tp->second << std::endl;
+    else
+        std::cout << "[cpp-service] No traceparent header — starting a new trace." << std::endl;
 
     // ── 2. Attach the extracted context ──────────────────────────────────────
     // Attach() installs parent_ctx as the active context on this thread.
