@@ -25,6 +25,61 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
+    <!-- JMS support (JmsTemplate) -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-activemq</artifactId>
+      <exclusions>
+        <!-- Exclude ActiveMQ broker — we use IBM MQ instead -->
+        <exclusion>
+          <groupId>org.apache.activemq</groupId>
+          <artifactId>activemq-broker</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <!-- IBM MQ client JARs — bundled in lib/ so the fat jar includes them -->
+    <dependency>
+      <groupId>com.ibm.mq</groupId>
+      <artifactId>com.ibm.mq.allclient</artifactId>
+      <version>9.4.0</version>
+      <scope>system</scope>
+      <systemPath>${project.basedir}/lib/com.ibm.mq.allclient.jar</systemPath>
+    </dependency>
+    <dependency>
+      <groupId>com.ibm.mq</groupId>
+      <artifactId>com.ibm.mq.commonservices</artifactId>
+      <version>9.4.0</version>
+      <scope>system</scope>
+      <systemPath>${project.basedir}/lib/com.ibm.mq.commonservices.jar</systemPath>
+    </dependency>
+    <dependency>
+      <groupId>com.ibm.mq</groupId>
+      <artifactId>com.ibm.mq.jmqi</artifactId>
+      <version>9.4.0</version>
+      <scope>system</scope>
+      <systemPath>${project.basedir}/lib/com.ibm.mq.jmqi.jar</systemPath>
+    </dependency>
+    <dependency>
+      <groupId>com.ibm.mq</groupId>
+      <artifactId>com.ibm.mq.headers</artifactId>
+      <version>9.4.0</version>
+      <scope>system</scope>
+      <systemPath>${project.basedir}/lib/com.ibm.mq.headers.jar</systemPath>
+    </dependency>
+    <dependency>
+      <groupId>javax.jms</groupId>
+      <artifactId>jms</artifactId>
+      <version>1.1</version>
+      <scope>system</scope>
+      <systemPath>${project.basedir}/lib/jms.jar</systemPath>
+    </dependency>
+    <dependency>
+      <groupId>org.json</groupId>
+      <artifactId>json</artifactId>
+      <version>20231013</version>
+      <scope>system</scope>
+      <systemPath>${project.basedir}/lib/org.json.jar</systemPath>
+    </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
@@ -37,6 +92,10 @@
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+        <configuration>
+          <!-- Include system-scoped jars in the fat jar -->
+          <includeSystemScope>true</includeSystemScope>
+        </configuration>
       </plugin>
     </plugins>
   </build>

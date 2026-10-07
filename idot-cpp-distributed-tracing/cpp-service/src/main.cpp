@@ -442,12 +442,9 @@ static void HandleOrder(const httplib::Request& req, httplib::Response& res)
 
     // ── 4e. PublishShipment — PRODUCER span (simulated) ──────────────────────
     // SpanKind::kProducer marks a fire-and-forget message publish.
-    // Messaging semantic conventions (messaging.system, messaging.destination,
-    // messaging.operation) distinguish async publish spans from synchronous
-    // CLIENT spans in trace visualisation tools.
+    // Messaging semantic conventions distinguish async publish spans from
+    // synchronous CLIENT spans in trace visualisation tools.
     // NOTE: This is a simulated operation — no real message broker is required.
-    // Replace messaging.system with your actual broker (rabbitmq, kafka, etc.)
-    // when connecting to a real system.
     {
         auto span = tracer->StartSpan("PublishShipment", ChildOf(trace::SpanKind::kProducer));
         trace::Scope s(span);

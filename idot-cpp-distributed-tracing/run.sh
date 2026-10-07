@@ -30,6 +30,12 @@ IDOT_INSTALL="${IDOT_INSTALL:-/tmp/opentelemetry-cpp}"
 CPP_OTLP_ENDPOINT="${CPP_OTLP_ENDPOINT:-localhost:4317}"
 # Set SCHEDULE_ENABLED=true to have java-caller fire one request every 5 seconds.
 SCHEDULE_ENABLED="${SCHEDULE_ENABLED:-true}"
+# IBM MQ connection details for java-receiver.
+MQ_HOST="${MQ_HOST:-localhost}"
+MQ_PORT="${MQ_PORT:-1414}"
+MQ_QMGR="${MQ_QMGR:-ACE.QUEUE.MANAGER}"
+MQ_CHANNEL="${MQ_CHANNEL:-ACE.SVRCONN}"
+MQ_QUEUE="${MQ_QUEUE:-TEST.QUEUE}"
 LOGS_DIR="$SCRIPT_DIR/logs"
 PIDS_FILE="$SCRIPT_DIR/.pids"
 FOREGROUND="${1:-}"
@@ -48,6 +54,7 @@ echo "==========================================="
 echo " IDOT C++ E2E Tracing Demo — Start"
 echo "==========================================="
 echo "cpp OTLP      : $CPP_OTLP_ENDPOINT"
+echo "MQ            : $MQ_HOST:$MQ_PORT  qmgr=$MQ_QMGR  channel=$MQ_CHANNEL  queue=$MQ_QUEUE"
 echo "Scheduled     : $SCHEDULE_ENABLED"
 echo "Logs          : $LOGS_DIR/"
 echo ""
@@ -76,7 +83,15 @@ start_bg() {
 # ── 1. java-receiver  (port 8081) ────────────────────────────────────────────
 # Plain JAR. The auto-instrumentation agent attached to this JVM reads the
 # W3C traceparent header injected by cpp-service and creates a SERVER span.
+# The JmsTemplate.send() call inside /ping is also auto-instrumented and
+# puts a message on IBM MQ, creating a PRODUCER span in the same trace.
 start_bg "java-receiver" \
+  env \
+  MQ_HOST="$MQ_HOST" \
+  MQ_PORT="$MQ_PORT" \
+  MQ_QMGR="$MQ_QMGR" \
+  MQ_CHANNEL="$MQ_CHANNEL" \
+  MQ_QUEUE="$MQ_QUEUE" \
   java \
   -jar "$SCRIPT_DIR/java-receiver/target/java-receiver-1.0.0.jar" \
   --server.port=8081
