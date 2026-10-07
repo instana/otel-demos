@@ -94,8 +94,12 @@ CPP_ENV=(
   JAVA_RECEIVER_URL=http://localhost:8081
   LD_LIBRARY_PATH="$IDOT_INSTALL/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 )
+OTEL_AGENT="${OTEL_AGENT:-/tmp/opentelemetry-javaagent.jar}"
 JAVA_CALLER_ARGS=(
   java
+  -javaagent:"$OTEL_AGENT"
+  -DOTEL_SERVICE_NAME=java-caller
+  -DOTEL_TRACES_EXPORTER=none
   -DCPP_SERVICE_URL=http://localhost:8080
   -DSCHEDULE_ENABLED="$SCHEDULE_ENABLED"
   -jar "$SCRIPT_DIR/java-caller/target/java-caller-1.0.0.jar"
