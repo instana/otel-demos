@@ -5,29 +5,29 @@ This sample shows how a C++ application instrumented with the **IDOT OpenTelemet
 The C++ service uses the IDOT library for manual instrumentation. The Java services use automatic instrumentation provided by the agent attached to their JVMs. The services participate in the same distributed trace by propagating the W3C traceparent context between services.
 
 ```
-  curl http://localhost:8082/order
+  curl http://<caller-host>:<caller-port>/order
            │
            │ HTTP
            ▼
   ┌─────────────────────┐
   │   java-caller       │  Spring Boot — auto-instrumented
-  │   :8082             │
+  │   :<caller-port>    │
   └──────────┬──────────┘
              │ HTTP + W3C traceparent
              ▼
   ┌─────────────────────┐
   │   cpp-service       │  IDOT OpenTelemetry C++ library
-  │   :8080             │  Manual instrumentation
+  │   :<cpp-port>       │  Manual instrumentation
   └──────────┬──────────┘
              │ HTTP + W3C traceparent
              ▼
   ┌─────────────────────┐
   │   java-receiver     │  Spring Boot — auto-instrumented
-  │   :8081             │
+  │   :<receiver-port>  │
   └──────────┬──────────┘
              │ OTLP/gRPC
              ▼
-       OpenTelemetry Collector / Instana Agent
+  OpenTelemetry Collector / Backend Endpoint
 ```
 
 ---
@@ -61,7 +61,7 @@ java-caller   GET /order                              SERVER  (auto-instrumented
    ├─ cpp-service  ChargePayment                      CLIENT   (simulated)
    ├─ cpp-service  UpdateInventory                    INTERNAL
    ├─ cpp-service  PublishShipment                    PRODUCER (simulated)
-   └─ cpp-service  HTTP GET http://localhost:8081/ping  CLIENT
+   └─ cpp-service  HTTP GET http://<receiver-host>:<receiver-port>/ping  CLIENT
       │
       └─ java-receiver  GET /ping                     SERVER   (auto-instrumented)
 ```
@@ -102,7 +102,7 @@ idot-cpp-distributed-tracing/
 | IDOT OpenTelemetry C++ package | Extracted at `<path-to-idot-package>` — set via `IDOT_INSTALL` env var |
 | Java 8+ | `java -version` |
 | Maven 3.6+ | `mvn --version` |
-| OpenTelemetry Collector or Instana Agent | OTLP/gRPC endpoint available on port `4317` |
+| OpenTelemetry Collector / OTLP backend | OTLP/gRPC endpoint available on `<collector-host>:<collector-port>` |
 
 ---
 
@@ -121,26 +121,61 @@ IDOT_INSTALL=/path/to/idot-package ./build.sh
 
 ---
 
-## Step 2 — Run
+## Step 2 — Configuration & Environment Variables
+
+The demo services can be configured via environment variables.
+
+### Environment Variables Reference
+
+| Variable | Description | Value / Format |
+|---|---|---|
+| `CPP_OTLP_ENDPOINT` | OTLP/gRPC target endpoint for `cpp-service` (e.g., OpenTelemetry Collector, telemetry agent, or observability backend). | `<collector-host>:<collector-port>` |
+| `OTEL_SERVICE_NAME` | Logical service name emitted in the trace resource attributes. | `<service-name>` |
+| `IDOT_INSTALL` | Root directory of the extracted IDOT OpenTelemetry C++ package. | `<path-to-idot-install>` |
+| `SCHEDULE_ENABLED` | When `true`, `java-caller` automatically issues a test request every 5 seconds. Set to `false` for manual testing via `curl`. | `true` \| `false` |
+| `SERVER_PORT` | HTTP listening port for `cpp-service`. | `<cpp-port>` |
+| `JAVA_RECEIVER_URL` | Downstream endpoint URL that `cpp-service` calls. | `http://<receiver-host>:<receiver-port>` |
+| `CPP_SERVICE_URL` | Target URL used by `java-caller` to forward `/order` requests. | `http://<cpp-host>:<cpp-port>` |
+
+---
+
+## Step 3 — Run
+
+Start all three services in the background:
 
 ```bash
 ./run.sh
 ```
 
-All three processes start in the background and write logs to `logs/`:
+To configure specific endpoints or disable automated scheduling:
+
+```bash
+# Example: Send traces to a remote OpenTelemetry Collector or backend
+CPP_OTLP_ENDPOINT=<collector-host>:<collector-port> ./run.sh
+
+# Example: Disable automatic scheduling for manual testing
+SCHEDULE_ENABLED=false ./run.sh
+
+# Example: Custom endpoints and ports
+IDOT_INSTALL=<path-to-idot-package> \
+CPP_OTLP_ENDPOINT=<collector-host>:<collector-port> \
+./run.sh
+```
+
+All three processes write logs to the `logs/` directory:
 
 | Process | Port | Log |
 |---|---|---|
-| `java-caller` | 8082 | `logs/java-caller.log` |
-| `cpp-service` | 8080 | `logs/cpp-service.log` |
-| `java-receiver` | 8081 | `logs/java-receiver.log` |
+| `java-caller` | `<caller-port>` | `logs/java-caller.log` |
+| `cpp-service` | `<cpp-port>` | `logs/cpp-service.log` |
+| `java-receiver` | `<receiver-port>` | `logs/java-receiver.log` |
 
 ---
 
-## Step 3 — Trigger a trace
+## Step 4 — Trigger a trace
 
 ```bash
-curl http://localhost:8082/order
+curl http://<caller-host>:<caller-port>/order
 ```
 
 Expected response:
@@ -148,22 +183,11 @@ Expected response:
 order processed — notify: pong
 ```
 
-To stop continuous traffic and trigger traces manually instead:
-
-```bash
-./stop.sh
-SCHEDULE_ENABLED=false ./run.sh
-```
-Then trigger individual traces with:
-```bash
-curl http://localhost:8082/order
-```
-
 ---
 
-## Step 4 — View traces
+## Step 5 — View traces
 
-Open your trace backend and search for service `cpp-service` or the `ProcessOrder` operation. The waterfall shows all three services linked under one trace ID.
+Open your observability backend or trace visualization UI and search for service `cpp-service` (or your configured `OTEL_SERVICE_NAME`) or the `ProcessOrder` operation. The waterfall displays all three services linked under a single unified trace ID.
 
 ---
 
@@ -174,12 +198,12 @@ After triggering a request, verify that:
 - `java-caller`, `cpp-service`, and `java-receiver` appear in the same trace.
 - The C++ spans are created by the IDOT OpenTelemetry C++ library.
 - The `traceparent` context is propagated from Java → C++ → Java.
-- The `ProcessOrder` span contains the child spans shown in the span tree above.
-- The trace is exported through OTLP/gRPC to the configured backend.
+- The `ProcessOrder` span contains the expected child spans and operations.
+- Telemetry spans are exported through OTLP/gRPC to the configured collector or backend.
 
 ---
 
-## Step 5 — Stop
+## Step 6 — Stop
 
 ```bash
 ./stop.sh
@@ -187,30 +211,31 @@ After triggering a request, verify that:
 
 ---
 
-## Sending spans to Instana
+## Connecting to an OpenTelemetry Collector or Backend
 
-If you are using an **Instana Agent** instead of a standalone OpenTelemetry Collector, enable OTLP on the agent by adding the following to `<instana-agent-config-dir>/configuration.yaml`:
+This demo exports standard OpenTelemetry data over OTLP/gRPC. It is compatible with any OpenTelemetry Collector, telemetry proxy, or compliant observability platform.
 
-```yaml
-com.instana.plugin.opentelemetry:
-  grpc:
-    enabled: true
-```
-
-Restart the agent, then point the demo at it:
+To point `cpp-service` to your collector or backend:
 
 ```bash
-CPP_OTLP_ENDPOINT=<agent-host>:4317 ./run.sh
+CPP_OTLP_ENDPOINT=<collector-host>:<collector-port> ./run.sh
 ```
 
-Two instrumentation modes are supported for the Java services:
+### Collector Configuration (OTLP gRPC Receiver)
 
-- **Instana Agent mode** — when the Instana Agent is running locally, it instruments the Java services via JVM auto-attach. No `-javaagent` flag is needed.
-- **Standalone OTel mode** — the Dockerfiles in this repo use the OpenTelemetry Java Agent directly, for environments where no Instana Agent is present.
+If running an OpenTelemetry Collector, ensure the OTLP gRPC receiver is configured with your desired endpoint:
 
-### View in Instana UI
+```yaml
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: <collector-bind-address>:<collector-port>
+```
 
-1. Open **Analytics → Calls**
-2. Filter by **Service = `cpp-service`**
-3. Click a **`ProcessOrder`** call to open the trace waterfall
+### Viewing Traces in your Observability Platform
+
+1. Open your observability / trace analysis UI.
+2. Filter by service name (e.g., `service.name = cpp-service`) or endpoint (e.g., `ProcessOrder`).
+3. Click on the trace entry to open the full distributed trace waterfall.
 
