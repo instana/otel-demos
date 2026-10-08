@@ -96,10 +96,10 @@ start_bg "java-receiver" \
   MQ_QUEUE="$MQ_QUEUE" \
   java \
   -javaagent:"$OTEL_AGENT" \
-  -DOTEL_SERVICE_NAME=java-receiver \
-  -DOTEL_TRACES_EXPORTER=otlp \
-  -DOTEL_EXPORTER_OTLP_ENDPOINT="http://$CPP_OTLP_ENDPOINT" \
-  -DOTEL_EXPORTER_OTLP_PROTOCOL=grpc \
+  -Dotel.service.name=java-receiver \
+  -Dotel.traces.exporter=otlp \
+  -Dotel.exporter.otlp.endpoint="http://$CPP_OTLP_ENDPOINT" \
+  -Dotel.exporter.otlp.protocol=grpc \
   -jar "$SCRIPT_DIR/java-receiver/target/java-receiver-1.0.0.jar" \
   --server.port=8081
 
@@ -119,10 +119,10 @@ CPP_ENV=(
 JAVA_CALLER_ARGS=(
   java
   -javaagent:"$OTEL_AGENT"
-  -DOTEL_SERVICE_NAME=java-caller
-  -DOTEL_TRACES_EXPORTER=otlp
-  -DOTEL_EXPORTER_OTLP_ENDPOINT="http://$CPP_OTLP_ENDPOINT"
-  -DOTEL_EXPORTER_OTLP_PROTOCOL=grpc
+  -Dotel.service.name=java-caller
+  -Dotel.traces.exporter=otlp
+  -Dotel.exporter.otlp.endpoint="http://$CPP_OTLP_ENDPOINT"
+  -Dotel.exporter.otlp.protocol=grpc
   -DCPP_SERVICE_URL=http://localhost:8080
   -DSCHEDULE_ENABLED="$SCHEDULE_ENABLED"
   -jar "$SCRIPT_DIR/java-caller/target/java-caller-1.0.0.jar"

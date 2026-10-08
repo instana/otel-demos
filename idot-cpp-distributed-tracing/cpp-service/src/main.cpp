@@ -256,15 +256,17 @@ static std::string CallDownstream(const std::string& url)
     auto span  = tracer->StartSpan("HTTP GET " + url, ChildOf(trace::SpanKind::kClient));
     trace::Scope scope(span);
 
-    span->SetAttribute("http.method",       "GET");
-    span->SetAttribute("http.url",          url);
-    // Old semconv peer attributes
-    span->SetAttribute("net.peer.name",     "localhost");
-    span->SetAttribute("net.peer.port",     8081);
-    // New semconv equivalents — so Instana connects this to java-receiver's SERVER span
-    span->SetAttribute("server.address",    "localhost");
-    span->SetAttribute("server.port",       8081);
-    span->SetAttribute("url.full",          url);
+    span->SetAttribute("rpc.system",          "http");
+    span->SetAttribute("rpc.service",         "java-receiver");
+    span->SetAttribute("rpc.method",          "GET /ping");
+    span->SetAttribute("peer.service",        "java-receiver");
+    span->SetAttribute("http.method",         "GET");
+    span->SetAttribute("http.url",            url);
+    span->SetAttribute("net.peer.name",       "java-receiver");
+    span->SetAttribute("net.peer.port",       8081);
+    span->SetAttribute("server.address",      "localhost");
+    span->SetAttribute("server.port",         8081);
+    span->SetAttribute("url.full",            url);
     span->SetAttribute("http.request.method", "GET");
 
     // ── Inject W3C context into outgoing headers ──────────────────────────────
