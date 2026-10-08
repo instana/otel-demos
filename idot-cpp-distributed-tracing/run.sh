@@ -97,7 +97,9 @@ start_bg "java-receiver" \
   java \
   -javaagent:"$OTEL_AGENT" \
   -DOTEL_SERVICE_NAME=java-receiver \
-  -DOTEL_TRACES_EXPORTER=none \
+  -DOTEL_TRACES_EXPORTER=otlp \
+  -DOTEL_EXPORTER_OTLP_ENDPOINT="http://$CPP_OTLP_ENDPOINT" \
+  -DOTEL_EXPORTER_OTLP_PROTOCOL=grpc \
   -jar "$SCRIPT_DIR/java-receiver/target/java-receiver-1.0.0.jar" \
   --server.port=8081
 
@@ -118,7 +120,9 @@ JAVA_CALLER_ARGS=(
   java
   -javaagent:"$OTEL_AGENT"
   -DOTEL_SERVICE_NAME=java-caller
-  -DOTEL_TRACES_EXPORTER=none
+  -DOTEL_TRACES_EXPORTER=otlp
+  -DOTEL_EXPORTER_OTLP_ENDPOINT="http://$CPP_OTLP_ENDPOINT"
+  -DOTEL_EXPORTER_OTLP_PROTOCOL=grpc
   -DCPP_SERVICE_URL=http://localhost:8080
   -DSCHEDULE_ENABLED="$SCHEDULE_ENABLED"
   -jar "$SCRIPT_DIR/java-caller/target/java-caller-1.0.0.jar"
