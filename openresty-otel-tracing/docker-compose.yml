@@ -1,4 +1,3 @@
-version: '3'
 services:
 
   client-app:
@@ -79,6 +78,7 @@ services:
     networks:
       openrestymesh:
         ipv4_address: 172.28.0.30
+        mac_address: 02:42:ac:1c:00:1e
         aliases:
           - instana-agent
     environment:
