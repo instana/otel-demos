@@ -53,6 +53,7 @@ Details: `INSTANA_HOST_ID` is used for Infrastructure correlation on Instana UI.
 It has to be the same as the Instana agent reported "Host ID" on the infrastructure map on Instana UI.
 Usually, the EUI-64 MAC address of the virtual Ethernet device of the instana-agent container
 is used here. An IPv4 address can be converted to EUI-64 (IP 172.28.0.30 becomes 02:42:ac:ff:fe:1c:00:1e).
+To ensure that this is static, `docker-compose.yml` contains `mac_address: 02:42:ac:1c:00:1e` for the agent container.
 
 The Instana agent is configured with `privileged: true` and static IPv4 address in `docker-compose.yml`,
 which allows it to read the same container MAC address directly and report the identical `host.id`.
