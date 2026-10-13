@@ -1,8 +1,8 @@
 // =============================================================================
-//  cpp-service  —  IDOT OpenTelemetry C++ distributed tracing example
+//  cpp-service  —  OpenTelemetry C++ distributed tracing sample
 //
-//  This service is the centrepiece of the end-to-end distributed tracing demo.
-//  It demonstrates key IDOT OpenTelemetry C++ tracing features:
+//  This service is the centrepiece of the end-to-end distributed tracing sample.
+//  It demonstrates key OpenTelemetry C++ tracing features:
 //
 //   TracerProvider + Resource      InitTelemetry()
 //   BatchSpanProcessor             InitTelemetry()   (production-ready export)
@@ -33,7 +33,9 @@
 // =============================================================================
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <csignal>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -45,6 +47,7 @@
 #  include <winsock2.h>
 #  include <windows.h>
 #else
+// Linux and AIX: POSIX headers for gethostname() and getpid()
 #  include <sys/types.h>
 #  include <unistd.h>
 #endif
@@ -52,7 +55,7 @@
 // ── libcurl: outbound HTTP to java-receiver ───────────────────────────────────
 #include <curl/curl.h>
 
-// ── IDOT OpenTelemetry C++ API & SDK headers ─────────────────────────────────
+// ── OpenTelemetry C++ API & SDK headers ──────────────────────────────────────
 #include <opentelemetry/context/propagation/global_propagator.h>
 #include <opentelemetry/context/propagation/text_map_propagator.h>
 #include <opentelemetry/context/runtime_context.h>
@@ -74,7 +77,7 @@
 // ── cpp-httplib: embedded HTTP server (header-only, vendored) ─────────────────
 #include "httplib.h"
 
-// ── Namespace aliases (IDOT convention) ──────────────────────────────────────
+// ── Namespace aliases ─────────────────────────────────────────────────────────
 namespace sdktrace   = opentelemetry::sdk::trace;
 namespace resource   = opentelemetry::sdk::resource;
 namespace trace      = opentelemetry::trace;
@@ -134,7 +137,7 @@ public:
 //  Telemetry initialisation
 //
 //  Sets up:
-//    1. OTLP/gRPC exporter  → Instana agent OTLP on localhost:4317
+//    1. OTLP/gRPC exporter  → OpenTelemetry Collector / backend OTLP endpoint
 //    2. BatchSpanProcessor  → buffers spans and exports in batches (production-ready)
 //    3. Resource attributes → service.name, host.name, process.pid
 //    4. Global W3C Trace Context propagator → traceparent / tracestate headers
@@ -145,10 +148,10 @@ static std::shared_ptr<sdktrace::TracerProvider> g_provider;
 static void InitTelemetry()
 {
     // ── OTLP/gRPC exporter ────────────────────────────────────────────────────
-    // Send directly to the Instana agent's OTLP/gRPC port (4317).
-    // The agent's opentelemetry plugin accepts all OTel spans and forwards
-    // them to the Instana backend via its own authenticated connection.
-    // The OTLP gRPC exporter takes host:port with no URL scheme prefix.
+    // Send spans to any OTLP/gRPC endpoint: an OpenTelemetry Collector,
+    // a telemetry proxy, or a compliant observability backend.
+    // Configure via OTEL_EXPORTER_OTLP_ENDPOINT (default: localhost:4317).
+    // The gRPC exporter requires a bare host:port with no URL scheme prefix.
     const char* ep_env   = std::getenv("OTEL_EXPORTER_OTLP_ENDPOINT");
     std::string endpoint = ep_env ? ep_env : "localhost:4317";
     for (auto prefix : {"grpc://", "http://", "https://"})
@@ -160,6 +163,7 @@ static void InitTelemetry()
 
     otlp::OtlpGrpcExporterOptions opts;
     opts.endpoint            = endpoint;
+    // TLS is disabled here; enable and supply credentials for production use.
     opts.use_ssl_credentials = false;
     opts.timeout             = std::chrono::milliseconds(10'000);
     auto exporter = otlp::OtlpGrpcExporterFactory::Create(opts);
@@ -178,8 +182,14 @@ static void InitTelemetry()
     // ── Resource attributes ───────────────────────────────────────────────────
     // Attached to every span exported by this process.
     char hostname[256] = {};
+#ifdef _WIN32
+    ::gethostname(hostname, sizeof(hostname) - 1);  // requires winsock2
+    int64_t pid = static_cast<int64_t>(::GetCurrentProcessId());
+#else
+    // Linux and AIX: gethostname() and getpid() from POSIX
     ::gethostname(hostname, sizeof(hostname) - 1);
     int64_t pid = static_cast<int64_t>(::getpid());
+#endif
 
     auto res = resource::Resource::Create({
         {opentelemetry::semconv::service::kServiceName,    svc},
@@ -239,6 +249,27 @@ static size_t CurlWrite(char* ptr, size_t size, size_t nmemb, std::string* out)
     return size * nmemb;
 }
 
+// Extracts the host and port from a URL of the form http[s]://host[:port][/path].
+// Returns {"host", port}.  Falls back to {"localhost", default_port} on parse error.
+static std::pair<std::string, int> ParseHostPort(const std::string& url, int default_port)
+{
+    // Strip scheme
+    std::string rest = url;
+    for (auto scheme : {"https://", "http://"})
+        if (rest.rfind(scheme, 0) == 0) { rest = rest.substr(std::strlen(scheme)); break; }
+    // Strip path
+    auto slash = rest.find('/');
+    if (slash != std::string::npos) rest = rest.substr(0, slash);
+    // Split host:port
+    auto colon = rest.rfind(':');
+    if (colon != std::string::npos) {
+        try {
+            return {rest.substr(0, colon), std::stoi(rest.substr(colon + 1))};
+        } catch (...) {}
+    }
+    return {rest.empty() ? "localhost" : rest, default_port};
+}
+
 // =============================================================================
 //  CallDownstream — outbound HTTP call with W3C context injection
 //
@@ -256,15 +287,19 @@ static std::string CallDownstream(const std::string& url)
     auto span  = tracer->StartSpan("HTTP GET " + url, ChildOf(trace::SpanKind::kClient));
     trace::Scope scope(span);
 
-    span->SetAttribute("http.method",       "GET");
-    span->SetAttribute("http.url",          url);
-    // Old semconv peer attributes
-    span->SetAttribute("net.peer.name",     "localhost");
-    span->SetAttribute("net.peer.port",     8081);
-    // New semconv equivalents — so Instana connects this to java-receiver's SERVER span
-    span->SetAttribute("server.address",    "localhost");
-    span->SetAttribute("server.port",       8081);
-    span->SetAttribute("url.full",          url);
+    // Derive host/port from the actual URL so span attributes reflect the real target.
+    auto [peer_host, peer_port] = ParseHostPort(url, 80);
+
+    span->SetAttribute("http.method",         "GET");
+    span->SetAttribute("http.url",            url);
+    // Old semconv peer attributes (OTel < 1.20)
+    span->SetAttribute("net.peer.name",       peer_host);
+    span->SetAttribute("net.peer.port",       peer_port);
+    // New semconv equivalents (OTel >= 1.20) — allows backends to correlate this
+    // CLIENT span with the downstream service's SERVER span across semconv versions.
+    span->SetAttribute("server.address",      peer_host);
+    span->SetAttribute("server.port",         peer_port);
+    span->SetAttribute("url.full",            url);
     span->SetAttribute("http.request.method", "GET");
 
     // ── Inject W3C context into outgoing headers ──────────────────────────────
@@ -276,8 +311,8 @@ static std::string CallDownstream(const std::string& url)
     propagation::GlobalTextMapPropagator::GetGlobalPropagator()
         ->Inject(carrier, ctx::RuntimeContext::GetCurrent());
 
-    // Log the injected traceparent so the demo audience can verify the same trace ID
-    // is carried forward to java-receiver.
+    // Log the injected traceparent to confirm the same trace ID is carried forward
+    // to java-receiver.
     for (auto& [k, v] : carrier.headers)
         if (k == "traceparent")
             std::cout << "[cpp-service] Injected  traceparent into java-receiver: "
@@ -316,7 +351,7 @@ static std::string CallDownstream(const std::string& url)
 // =============================================================================
 //  HandleOrder — main request handler
 //
-//  Demonstrates the full IDOT instrumentation lifecycle for one HTTP request:
+//  Demonstrates the full OTel C++ instrumentation lifecycle for one HTTP request:
 //
 //  1. Extract  — read the incoming W3C traceparent header from java-caller
 //  2. Attach   — make the extracted context active so child spans inherit it
@@ -332,19 +367,18 @@ static void HandleOrder(const httplib::Request& req, httplib::Response& res)
     auto tracer = GetTracer();
 
     // ── 1. Extract incoming W3C Trace Context ────────────────────────────────
-    // The Instana agent on java-caller automatically injects a "traceparent"
+    // The OTel Java Agent on java-caller automatically injects a "traceparent"
     // header into every outbound RestTemplate call.  Extract() parses it and
     // returns a Context containing the remote SpanContext as the parent.
-    // Instana uses 64-bit trace IDs, zero-padded to 128 bits in traceparent:
-    //   traceparent: 00-0000000000000000<64-bit-id>-<spanId>-01
-    // The IDOT SDK preserves this trace ID exactly, so the C++ spans share the
-    // same trace ID as the java-caller spans in the Instana backend.
+    // The W3C traceparent format is: 00-<traceId>-<spanId>-<flags>
+    // The OTel C++ SDK preserves the trace ID exactly, so the C++ spans share
+    // the same trace ID as the java-caller spans in the observability backend.
     HttplibRequestCarrier in_carrier(req.headers);
     auto current_ctx = ctx::RuntimeContext::GetCurrent();
     auto parent_ctx  = propagation::GlobalTextMapPropagator::GetGlobalPropagator()
                            ->Extract(in_carrier, current_ctx);
 
-    // Log the incoming traceparent so the demo audience can see the shared trace ID.
+    // Log the incoming traceparent to confirm context propagation from java-caller.
     auto incoming_tp = req.headers.find("traceparent");
     if (incoming_tp != req.headers.end())
         std::cout << "[cpp-service] Extracted traceparent from java-caller : "
@@ -367,20 +401,26 @@ static void HandleOrder(const httplib::Request& req, httplib::Response& res)
     auto root = tracer->StartSpan("ProcessOrder", root_opts);
     trace::Scope root_scope(root);
 
+    // Derive the listening host/port from the same env vars used at startup.
+    const char* srv_host_env = std::getenv("SERVER_HOST");
+    const char* srv_port_env = std::getenv("SERVER_PORT");
+    std::string srv_host = srv_host_env ? srv_host_env : "localhost";
+    int         srv_port = srv_port_env ? std::stoi(std::string(srv_port_env)) : 8080;
+
     // HTTP semantic attributes — both old semconv (http.*) and new semconv
-    // (server.*, network.*) so Instana can correlate the CLIENT span from
-    // java-caller with this SERVER span regardless of which convention it uses.
+    // (server.*, network.*) so backends can correlate the inbound CLIENT span
+    // from java-caller with this SERVER span regardless of which convention they use.
     root->SetAttribute("http.method",      req.method);
     root->SetAttribute("http.target",      req.path);
     root->SetAttribute("http.route",       "/order");
     root->SetAttribute("http.server_name", "cpp-service");
     root->SetAttribute("http.scheme",      "http");
     root->SetAttribute("http.flavor",      "1.1");
-    root->SetAttribute("net.host.name",    "localhost");
-    root->SetAttribute("net.host.port",    8080);
-    // New semconv equivalents (OTel 1.20+) — recognised by OTel Java Agent
-    root->SetAttribute("server.address",   "localhost");
-    root->SetAttribute("server.port",      8080);
+    root->SetAttribute("net.host.name",    srv_host);
+    root->SetAttribute("net.host.port",    srv_port);
+    // New semconv equivalents (OTel 1.20+)
+    root->SetAttribute("server.address",   srv_host);
+    root->SetAttribute("server.port",      srv_port);
     root->SetAttribute("url.path",         req.path);
     root->SetAttribute("url.scheme",       "http");
     // Business attributes — describe the work being done
@@ -518,7 +558,7 @@ int main()
 
     const char* svc = std::getenv("OTEL_SERVICE_NAME");
     std::cout << "=============================================" << std::endl;
-    std::cout << " IDOT OpenTelemetry C++ — cpp-service"        << std::endl;
+    std::cout << " OpenTelemetry C++ — cpp-service"             << std::endl;
     std::cout << "=============================================" << std::endl;
     std::cout << " Service  : " << (svc ? svc : "cpp-service")  << std::endl;
     std::cout << " Port     : " << port                          << std::endl;
@@ -541,11 +581,37 @@ int main()
         r.set_content("OK", "text/plain");
     });
 
+    // ── Signal handler — graceful shutdown on SIGTERM / SIGINT ───────────────
+    // Stops the HTTP server so svr.listen() returns and the shutdown sequence
+    // (ForceFlush + Shutdown) runs before the process exits.  Without this,
+    // a process termination signal would discard spans still buffered in the
+    // BatchSpanProcessor queue.
+    //
+    // SIGTERM and SIGINT are POSIX signals supported on Linux and AIX.
+    // On Windows, CTRL_C_EVENT/CTRL_BREAK_EVENT are used instead; std::signal
+    // with SIGINT maps to Ctrl-C in a Windows console, which is sufficient for
+    // interactive use.  For Windows service scenarios, replace with
+    // SetConsoleCtrlHandler().
+    //
+    // An atomic flag is set by the signal handler.  A watcher thread polls the
+    // flag and calls svr.stop() — signal handlers must not call non-async-safe
+    // functions directly, so the stop is delegated to the watcher thread.
+    static std::atomic<bool> g_stop{false};
+    std::signal(SIGINT,  [](int) { g_stop.store(true); });
+    std::signal(SIGTERM, [](int) { g_stop.store(true); });
+
+    std::thread watcher([&svr]() {
+        while (!g_stop.load())
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        svr.stop();
+    });
+
     std::cout << "Listening on :" << port
               << " — waiting for requests from java-caller..." << std::endl;
-    svr.listen("0.0.0.0", port);
+    svr.listen("0.0.0.0", port);   // blocks until svr.stop() is called
 
-    ShutdownTelemetry();
+    watcher.join();
+    ShutdownTelemetry();           // ForceFlush + Shutdown — flushes all buffered spans
     curl_global_cleanup();
     return 0;
 }

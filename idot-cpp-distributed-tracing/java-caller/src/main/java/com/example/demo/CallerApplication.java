@@ -1,4 +1,4 @@
-package com.instana.demo;
+package com.example.demo;
 
 import io.opentelemetry.api.trace.Span;
 import org.slf4j.Logger;
@@ -29,7 +29,7 @@ import java.time.Duration;
  *
  * Usage:
  *   Trigger a single trace:
- *     curl http://localhost:8082/order
+ *     curl http://<host>:<server.port>/order
  *
  *   Enable continuous traffic (one call every 5 s):
  *     Set environment variable SCHEDULE_ENABLED=true before starting.
