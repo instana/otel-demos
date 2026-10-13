@@ -37,6 +37,8 @@ Just follow a howto:
 
 https://patterncatalyst.github.io/minikube-on-fedora/docs/02-installation/
 
+**NOTE**: Install minikube 1.38.1 because 1.39.0 uses podman instead and is still unsupported.
+
 ### Install helm 3 on Fedora
 
 Follow a howto:
