@@ -1,0 +1,24 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: drop-instana-headers
+spec:
+  # Target every pod that carries the istio: ingressgateway label,
+  # i.e. all ingressgateway instances in the namespace this resource lives in.
+  workloadSelector:
+    labels:
+      istio: ingressgateway
+  configPatches:
+    - applyTo: VIRTUAL_HOST
+      match:
+        context: GATEWAY
+        routeConfiguration:
+          vhost:
+            name: "*:80"
+      patch:
+        operation: MERGE
+        value:
+          request_headers_to_remove:
+            - "x-instana-t"
+            - "x-instana-s"
+            - "tracestate"

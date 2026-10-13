@@ -1,0 +1,62 @@
+version: '3'
+services:
+
+  client-app:
+    build:
+      context: ./client-app
+    networks:
+      - istiomesh
+    environment:
+      - INSTANA_SPANBATCHING_ENABLED=false
+      - target_url=http://server-app:8080/
+
+  server-app:
+    build:
+      context: ./server-app
+      args:
+        agent_key: ${agent_key}
+        download_key: ${download_key}
+    networks:
+      istiomesh:
+        aliases:
+          - server-app
+    environment:
+      - INSTANA_AGENT_HOST=instana-agent
+      - INSTANA_AGENT_PORT=42699
+      - SERVER_PORT=8080
+    expose:
+      - "8080"
+
+  agent:
+    image: icr.io/instana/agent
+    pid: "host"
+    privileged: true
+    volumes:
+      - /var/run:/var/run
+      - /run:/run
+      - ./agent/configuration.yaml:/opt/instana/agent/etc/instana/configuration.yaml:ro
+      # Include the File.cfg so spans are written to disk. We use them to verify which spans have been sent to the agent.
+      - ./agent/com.instana.agent.main.sender.File.cfg:/opt/instana/agent/etc/instana/com.instana.agent.main.sender.File.cfg:ro
+      # Mount the logs directly so we can directly access the span-*.log files to check the produced spans.
+      - ./agent/logs:/opt/instana/agent/data/log
+    networks:
+      istiomesh:
+        aliases:
+          - instana-agent
+    environment:
+      - INSTANA_AGENT_ENDPOINT=${agent_endpoint:-ingress-red-saas.instana.io}
+      - INSTANA_AGENT_ENDPOINT_PORT=${agent_endpoint_port:-443}
+      - INSTANA_AGENT_KEY=${agent_key}
+      - INSTANA_DOWNLOAD_KEY=${download_key}
+      - INSTANA_AGENT_ZONE=${agent_zone:-istio-tracing-demo}
+    healthcheck:
+      test: ["CMD", "curl", "localhost:42699"]
+      interval: 8s
+      timeout: 10s
+      retries: 5
+    expose:
+      - "42699"
+      - "4317"
+
+networks:
+  istiomesh: {}

@@ -1,0 +1,26 @@
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+spec:
+  components:
+    cni:
+      enabled: true
+  values:
+    cni:
+      cniBinDir: /opt/cni/bin
+      cniConfDir: /etc/cni/net.d
+    global:
+      proxy:
+        componentLogLevel: "tracing:debug"
+  meshConfig:
+    accessLogFile: /dev/stdout
+    enableTracing: true
+    defaultConfig:
+      tracing: {}
+    extensionProviders:
+      - name: instana-otel
+        opentelemetry:
+          service: instana-agent.instana-agent.svc.cluster.local
+          port: 4318
+          http:
+            path: "/v1/traces"
+            timeout: 5s
