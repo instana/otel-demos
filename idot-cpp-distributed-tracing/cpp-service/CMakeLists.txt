@@ -53,4 +53,25 @@ if(WIN32)
             $<TARGET_FILE_DIR:cpp-service>
         COMMENT "Copying opentelemetry_cpp.dll to output directory"
     )
+
+    # Copy libcurl.dll next to the executable after each build.
+    # CURL_LIBRARY is the import library (.lib); the matching DLL sits alongside
+    # it in the same directory on a standard curl install (bin\ or the same dir).
+    # get_filename_component resolves the DLL path from the .lib path.
+    get_filename_component(_curl_lib_dir "${CURL_LIBRARY}" DIRECTORY)
+    find_file(_curl_dll
+        NAMES libcurl.dll libcurl-x64.dll
+        HINTS "${_curl_lib_dir}" "${_curl_lib_dir}/../bin"
+        NO_DEFAULT_PATH
+    )
+    if(_curl_dll)
+        add_custom_command(TARGET cpp-service POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${_curl_dll}"
+                $<TARGET_FILE_DIR:cpp-service>
+            COMMENT "Copying libcurl.dll to output directory"
+        )
+    else()
+        message(WARNING "libcurl.dll not found next to CURL_LIBRARY — copy it manually to the output directory before running cpp-service.exe")
+    endif()
 endif()

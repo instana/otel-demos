@@ -76,6 +76,16 @@ JAVA_OTLP_ENDPOINT="${JAVA_OTLP_ENDPOINT:-http://localhost:4317}"
 # Defaults to false so the developer triggers traces manually with curl.
 SCHEDULE_ENABLED="${SCHEDULE_ENABLED:-false}"
 
+# Service ports — override if the defaults conflict with something already on the host.
+SERVER_PORT="${SERVER_PORT:-8080}"           # cpp-service listen port
+JAVA_RECEIVER_PORT="${JAVA_RECEIVER_PORT:-8081}"  # java-receiver listen port
+JAVA_CALLER_PORT="${JAVA_CALLER_PORT:-8082}"      # java-caller listen port
+
+# Inter-service URLs — derived from the ports above, but can be overridden explicitly
+# (e.g. when services run on different hosts).
+JAVA_RECEIVER_URL="${JAVA_RECEIVER_URL:-http://localhost:${JAVA_RECEIVER_PORT}}"
+CPP_SERVICE_URL="${CPP_SERVICE_URL:-http://localhost:${SERVER_PORT}}"
+
 LOGS_DIR="$SCRIPT_DIR/logs"
 PIDS_FILE="$SCRIPT_DIR/.pids"
 FOREGROUND="${1:-}"
@@ -96,15 +106,18 @@ echo "==========================================="
 echo "cpp OTLP      : $CPP_OTLP_ENDPOINT"
 echo "Java OTLP     : $JAVA_OTLP_ENDPOINT"
 echo "Scheduled     : $SCHEDULE_ENABLED"
+echo "cpp-service   : :${SERVER_PORT}  (JAVA_RECEIVER_URL=$JAVA_RECEIVER_URL)"
+echo "java-receiver : :${JAVA_RECEIVER_PORT}"
+echo "java-caller   : :${JAVA_CALLER_PORT}  (CPP_SERVICE_URL=$CPP_SERVICE_URL)"
 echo "Logs          : $LOGS_DIR/"
 echo ""
 HOST_ADDR="$(hostname -f)"
-echo "  Trigger a trace:  curl http://${HOST_ADDR}:8082/order"
+echo "  Trigger a trace:  curl http://${HOST_ADDR}:${JAVA_CALLER_PORT}/order"
 if [[ "$SCHEDULE_ENABLED" == "true" ]]; then
   echo "  Scheduler: enabled (one call every 5 s)"
 else
   echo "  Scheduler: disabled — trigger traces manually:"
-  echo "    curl http://${HOST_ADDR}:8082/order"
+  echo "    curl http://${HOST_ADDR}:${JAVA_CALLER_PORT}/order"
   echo "  (set SCHEDULE_ENABLED=true to enable continuous traffic)"
 fi
 echo ""
@@ -132,7 +145,7 @@ start_bg "java-receiver" \
   -DOTEL_SERVICE_NAME=java-receiver \
   -DOTEL_EXPORTER_OTLP_ENDPOINT="$JAVA_OTLP_ENDPOINT" \
   -jar "$SCRIPT_DIR/java-receiver/target/java-receiver-1.0.0.jar" \
-  --server.port=8081
+  --server.port="${JAVA_RECEIVER_PORT}"
 
 # Give receiver time to bind its port before the C++ service tries to call it.
 sleep 5
@@ -150,8 +163,8 @@ if [[ "$(uname)" == "AIX" ]]; then
     env
     OTEL_SERVICE_NAME=cpp-service
     OTEL_EXPORTER_OTLP_ENDPOINT="$CPP_OTLP_ENDPOINT"
-    SERVER_PORT=8080
-    JAVA_RECEIVER_URL=http://localhost:8081
+    SERVER_PORT="$SERVER_PORT"
+    JAVA_RECEIVER_URL="$JAVA_RECEIVER_URL"
     LIBPATH="$SDK_LIB_DIR${LIBPATH:+:$LIBPATH}"
   )
 else
@@ -160,8 +173,8 @@ else
     env
     OTEL_SERVICE_NAME=cpp-service
     OTEL_EXPORTER_OTLP_ENDPOINT="$CPP_OTLP_ENDPOINT"
-    SERVER_PORT=8080
-    JAVA_RECEIVER_URL=http://localhost:8081
+    SERVER_PORT="$SERVER_PORT"
+    JAVA_RECEIVER_URL="$JAVA_RECEIVER_URL"
     LD_LIBRARY_PATH="$SDK_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
   )
 fi
@@ -171,10 +184,10 @@ JAVA_CALLER_ARGS=(
   -javaagent:"$OTEL_AGENT"
   -DOTEL_SERVICE_NAME=java-caller
   -DOTEL_EXPORTER_OTLP_ENDPOINT="$JAVA_OTLP_ENDPOINT"
-  -DCPP_SERVICE_URL=http://localhost:8080
+  -DCPP_SERVICE_URL="$CPP_SERVICE_URL"
   -DSCHEDULE_ENABLED="$SCHEDULE_ENABLED"
   -jar "$SCRIPT_DIR/java-caller/target/java-caller-1.0.0.jar"
-  --server.port=8082
+  --server.port="${JAVA_CALLER_PORT}"
 )
 
 if [[ "$FOREGROUND" == "--foreground" ]]; then
@@ -199,12 +212,12 @@ else
   echo "==========================================="
   echo " All services started."
   echo ""
-  echo "  java-caller   :8082  (log: $LOGS_DIR/java-caller.log)"
-  echo "  cpp-service   :8080  (log: $LOGS_DIR/cpp-service.log)"
-  echo "  java-receiver :8081  (log: $LOGS_DIR/java-receiver.log)"
+  echo "  java-caller   :${JAVA_CALLER_PORT}  (log: $LOGS_DIR/java-caller.log)"
+  echo "  cpp-service   :${SERVER_PORT}  (log: $LOGS_DIR/cpp-service.log)"
+  echo "  java-receiver :${JAVA_RECEIVER_PORT}  (log: $LOGS_DIR/java-receiver.log)"
   echo ""
   echo "  Trigger a trace:"
-  echo "    curl http://${HOST_ADDR}:8082/order"
+  echo "    curl http://${HOST_ADDR}:${JAVA_CALLER_PORT}/order"
   echo ""
   echo "  cpp-service spans → OTLP/gRPC → $CPP_OTLP_ENDPOINT"
   echo "  Run ./stop.sh to stop all services."

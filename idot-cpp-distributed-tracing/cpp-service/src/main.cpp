@@ -62,8 +62,7 @@
 #include <opentelemetry/exporters/otlp/otlp_grpc_exporter_factory.h>
 #include <opentelemetry/exporters/otlp/otlp_grpc_exporter_options.h>
 #include <opentelemetry/sdk/resource/resource.h>
-#include <opentelemetry/sdk/trace/batch_span_processor_factory.h>    // BatchSpanProcessor
-#include <opentelemetry/sdk/trace/batch_span_processor_options.h>
+#include <opentelemetry/sdk/trace/simple_processor_factory.h>
 #include <opentelemetry/sdk/trace/provider.h>
 #include <opentelemetry/sdk/trace/tracer_provider.h>
 #include <opentelemetry/sdk/trace/tracer_provider_factory.h>
@@ -168,16 +167,8 @@ static void InitTelemetry()
     opts.timeout             = std::chrono::milliseconds(10'000);
     auto exporter = otlp::OtlpGrpcExporterFactory::Create(opts);
 
-    // ── BatchSpanProcessor ────────────────────────────────────────────────────
-    // Buffers spans in memory and exports them in batches asynchronously,
-    // reducing the impact of export operations on the request thread.
-    // This is the recommended processor for production.
-    sdktrace::BatchSpanProcessorOptions bsp_opts;
-    bsp_opts.max_queue_size        = 2048;   // drop oldest when queue is full
-    bsp_opts.schedule_delay_millis = std::chrono::milliseconds(1000);
-    bsp_opts.max_export_batch_size = 512;
-    auto processor = sdktrace::BatchSpanProcessorFactory::Create(
-                         std::move(exporter), bsp_opts);
+    // ── Span Processor ────────────────────────────────────────────────────────
+    auto processor = sdktrace::SimpleSpanProcessorFactory::Create(std::move(exporter));
 
     // ── Resource attributes ───────────────────────────────────────────────────
     // Attached to every span exported by this process.

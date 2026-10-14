@@ -29,9 +29,34 @@
 
 .PARAMETER ScheduleEnabled
     When $true, java-caller automatically sends one GET /order every 5 seconds.
-    When $false, trigger traces manually with: curl http://<host>:8082/order
+    When $false, trigger traces manually with: curl http://<host>:<JavaCallerPort>/order
     Can also be set via the environment variable SCHEDULE_ENABLED.
-    Default: $true
+    Default: $false
+
+.PARAMETER ServerPort
+    TCP port cpp-service listens on.
+    Can also be set via the environment variable SERVER_PORT.
+    Default: 8080
+
+.PARAMETER JavaReceiverPort
+    TCP port java-receiver listens on.
+    Can also be set via the environment variable JAVA_RECEIVER_PORT.
+    Default: 8081
+
+.PARAMETER JavaCallerPort
+    TCP port java-caller listens on.
+    Can also be set via the environment variable JAVA_CALLER_PORT.
+    Default: 8082
+
+.PARAMETER JavaReceiverUrl
+    Base URL cpp-service uses to call java-receiver (appends /ping).
+    Can also be set via the environment variable JAVA_RECEIVER_URL.
+    Default: http://localhost:<JavaReceiverPort>
+
+.PARAMETER CppServiceUrl
+    Base URL java-caller uses to call cpp-service (appends /order).
+    Can also be set via the environment variable CPP_SERVICE_URL.
+    Default: http://localhost:<ServerPort>
 
 .EXAMPLE
     $env:IDOT_OTEL_CPP_INSTALL = "<path-to-opentelemetry-cpp>"
@@ -45,6 +70,15 @@
         -CppOtlpEndpoint    "<collector-host>:<grpc-port>" `
         -JavaOtlpEndpoint   "http://<collector-host>:<grpc-port>" `
         -ScheduleEnabled    $true
+
+.EXAMPLE
+    # Run services on non-default ports
+    .\run.ps1 `
+        -IdotOtelCppInstall "<path-to-opentelemetry-cpp>" `
+        -OtelAgent          "<path-to-opentelemetry-javaagent.jar>" `
+        -ServerPort         9080 `
+        -JavaReceiverPort   9081 `
+        -JavaCallerPort     9082
 #>
 
 [CmdletBinding()]
@@ -53,7 +87,12 @@ param(
     [string]$OtelAgent          = $env:OTEL_AGENT,
     [string]$CppOtlpEndpoint    = $(if ($env:CPP_OTLP_ENDPOINT)  { $env:CPP_OTLP_ENDPOINT }  else { 'localhost:4317' }),
     [string]$JavaOtlpEndpoint   = $(if ($env:JAVA_OTLP_ENDPOINT) { $env:JAVA_OTLP_ENDPOINT } else { 'http://localhost:4317' }),
-    [bool]  $ScheduleEnabled    = $(if ($env:SCHEDULE_ENABLED)   { [System.Convert]::ToBoolean($env:SCHEDULE_ENABLED) } else { $false })
+    [bool]  $ScheduleEnabled    = $(if ($env:SCHEDULE_ENABLED)   { [System.Convert]::ToBoolean($env:SCHEDULE_ENABLED) } else { $false }),
+    [int]   $ServerPort         = $(if ($env:SERVER_PORT)        { [int]$env:SERVER_PORT }         else { 8080 }),
+    [int]   $JavaReceiverPort   = $(if ($env:JAVA_RECEIVER_PORT) { [int]$env:JAVA_RECEIVER_PORT }  else { 8081 }),
+    [int]   $JavaCallerPort     = $(if ($env:JAVA_CALLER_PORT)   { [int]$env:JAVA_CALLER_PORT }    else { 8082 }),
+    [string]$JavaReceiverUrl    = $(if ($env:JAVA_RECEIVER_URL)  { $env:JAVA_RECEIVER_URL }  else { "http://localhost:$( $(if ($env:JAVA_RECEIVER_PORT) { [int]$env:JAVA_RECEIVER_PORT } else { 8081 }) )" }),
+    [string]$CppServiceUrl      = $(if ($env:CPP_SERVICE_URL)    { $env:CPP_SERVICE_URL }    else { "http://localhost:$( $(if ($env:SERVER_PORT) { [int]$env:SERVER_PORT } else { 8080 }) )" })
 )
 
 Set-StrictMode -Version Latest
@@ -113,10 +152,13 @@ New-Item -ItemType Directory -Force -Path $LogsDir | Out-Null
 Write-Host "==========================================="
 Write-Host " OTel C++ Distributed Tracing -- Start"
 Write-Host "==========================================="
-Write-Host "cpp OTLP  : $CppOtlpEndpoint"
-Write-Host "Java OTLP : $JavaOtlpEndpoint"
-Write-Host "Scheduled : $ScheduleEnabled"
-Write-Host "Logs      : $LogsDir\"
+Write-Host "cpp OTLP      : $CppOtlpEndpoint"
+Write-Host "Java OTLP     : $JavaOtlpEndpoint"
+Write-Host "Scheduled     : $ScheduleEnabled"
+Write-Host "cpp-service   : :$ServerPort  (JAVA_RECEIVER_URL=$JavaReceiverUrl)"
+Write-Host "java-receiver : :$JavaReceiverPort"
+Write-Host "java-caller   : :$JavaCallerPort  (CPP_SERVICE_URL=$CppServiceUrl)"
+Write-Host "Logs          : $LogsDir\"
 Write-Host ""
 
 # ── Helper: start a process, redirect output to a log file, record PID ───────
@@ -187,7 +229,7 @@ Start-Service -Name "java-receiver" `
         "-DOTEL_SERVICE_NAME=java-receiver",
         "-DOTEL_EXPORTER_OTLP_ENDPOINT=$JavaOtlpEndpoint",
         "-jar", $ReceiverJar,
-        "--server.port=8081"
+        "--server.port=$JavaReceiverPort"
     )
 
 # Give java-receiver time to bind its port before cpp-service tries to call it.
@@ -203,8 +245,8 @@ Start-Service -Name "cpp-service" `
     -ExtraEnv @{
         OTEL_SERVICE_NAME             = 'cpp-service'
         OTEL_EXPORTER_OTLP_ENDPOINT   = $CppOtlpEndpoint
-        SERVER_PORT                   = '8080'
-        JAVA_RECEIVER_URL             = 'http://localhost:8081'
+        SERVER_PORT                   = "$ServerPort"
+        JAVA_RECEIVER_URL             = $JavaReceiverUrl
     }
 
 Start-Sleep -Seconds 3
@@ -218,10 +260,10 @@ Start-Service -Name "java-caller" `
         "-javaagent:$OtelAgent",
         "-DOTEL_SERVICE_NAME=java-caller",
         "-DOTEL_EXPORTER_OTLP_ENDPOINT=$JavaOtlpEndpoint",
-        "-DCPP_SERVICE_URL=http://localhost:8080",
+        "-DCPP_SERVICE_URL=$CppServiceUrl",
         "-DSCHEDULE_ENABLED=$($ScheduleEnabled.ToString().ToLower())",
         "-jar", $CallerJar,
-        "--server.port=8082"
+        "--server.port=$JavaCallerPort"
     )
 
 # ── Persist PIDs for stop.ps1 ─────────────────────────────────────────────────
@@ -231,12 +273,12 @@ Write-Host ""
 Write-Host "==========================================="
 Write-Host " All services started."
 Write-Host ""
-Write-Host "  java-caller   :8082  (log: $LogsDir\java-caller.log)"
-Write-Host "  cpp-service   :8080  (log: $LogsDir\cpp-service.log)"
-Write-Host "  java-receiver :8081  (log: $LogsDir\java-receiver.log)"
+Write-Host "  java-caller   :$JavaCallerPort  (log: $LogsDir\java-caller.log)"
+Write-Host "  cpp-service   :$ServerPort  (log: $LogsDir\cpp-service.log)"
+Write-Host "  java-receiver :$JavaReceiverPort  (log: $LogsDir\java-receiver.log)"
 Write-Host ""
 Write-Host "  Trigger a trace:"
-Write-Host "    curl http://$([System.Net.Dns]::GetHostEntry('').HostName):8082/order"
+Write-Host "    curl http://$([System.Net.Dns]::GetHostEntry('').HostName):$JavaCallerPort/order"
 Write-Host ""
 Write-Host "  cpp-service spans -> OTLP/gRPC -> $CppOtlpEndpoint"
 Write-Host "  Run .\stop.ps1 to stop all services."

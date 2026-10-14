@@ -4,6 +4,27 @@ This sample shows how a C++ service instrumented with the **IDOT OpenTelemetry C
 
 ---
 
+## Table of contents
+
+1. [What is distributed tracing?](#what-is-distributed-tracing-and-why-does-it-matter)
+2. [How it works](#how-it-works)
+3. [Prerequisites](#prerequisites)
+4. [Quick start](#quick-start)
+5. [Step 0 — Set up your collector or backend](#step-0--set-up-your-collector-or-backend)
+6. [Step 1 — Build](#step-1--build)
+7. [Step 2 — Start the services](#step-2--start-the-services)
+8. [Step 3 — Trigger a trace](#step-3--trigger-a-trace)
+9. [Step 4 — View and verify traces](#step-4--view-and-verify-traces)
+10. [Step 5 — Stop](#step-5--stop)
+11. [Environment variables reference](#environment-variables-reference)
+12. [Project structure](#project-structure)
+13. [Span tree](#span-tree)
+14. [What the sample covers](#what-the-sample-covers)
+15. [Applying this to your own C++ service](#applying-this-to-your-own-c-service)
+16. [Troubleshooting](#troubleshooting)
+
+---
+
 ## What is distributed tracing and why does it matter?
 
 In a microservices or multi-language architecture, a single user request typically crosses several services — a gateway, a business logic service, a database proxy, a notification service. When something goes wrong or is slow, a traditional log search tells you only what each individual service saw in isolation. You cannot easily answer:
@@ -32,71 +53,6 @@ When `java-caller` calls `cpp-service`, the OTel Java Agent automatically inject
 
 ---
 
-## Prerequisites
-
-The C++ source code (`main.cpp`) and its build system (`CMakeLists.txt`) support **Windows**, **Linux**, and **AIX**.
-
-| Platform | Build script | Run script | Stop script |
-|---|---|---|---|
-| Linux / AIX | `build.sh` (Bash) | `run.sh` (Bash) | `stop.sh` (Bash) |
-| Windows | `build.ps1` (PowerShell) | `run.ps1` (PowerShell) | `stop.ps1` (PowerShell) |
-
-### Software requirements
-
-| Requirement | Minimum version | How to verify |
-|---|---|---|
-| C++ compiler | C++17 capable | Linux: GCC (`g++ --version`) · AIX: XL C++ or GCC from AIX Toolbox · Windows: MSVC (`cl.exe`) |
-| CMake | 3.16 | `cmake --version` — available from AIX Toolbox on AIX |
-| Bash | 4.0 or later | AIX ships `/bin/sh` (ksh); install Bash from AIX Toolbox: `rpm -i bash-*.rpm` · verify: `bash --version` |
-| libcurl | — | Linux: `dnf install libcurl-devel` or `apt install libcurl4-openssl-dev` · AIX: `rpm -i curl-devel-*.rpm` from AIX Toolbox · Windows: download from [curl.se](https://curl.se/windows/) |
-| IDOT OpenTelemetry C++ SDK | — | An installed or extracted SDK directory. Set its location via `IDOT_OTEL_CPP_INSTALL`. See platform notes below for the expected directory layout. |
-| Java | 8 or later | `java -version` |
-| Maven | 3.6 or later | `mvn --version` |
-| OpenTelemetry Java Agent JAR | — | Download from [opentelemetry-java-instrumentation releases](https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases). Set the path via `OTEL_AGENT`. |
-| OpenTelemetry Collector or OTLP/gRPC backend | — | Any OTLP/gRPC-compatible endpoint. See [Connecting to a collector](#connecting-to-an-opentelemetry-collector). |
-
-### SDK directory layout by platform
-
-The IDOT OpenTelemetry C++ SDK install directory structure differs by platform. CMake locates headers and libraries through `IDOT_OTEL_CPP_INSTALL`; the shared libraries must also be on the runtime library search path.
-
-| Platform | CMake config file location | Shared library location | Runtime path variable |
-|---|---|---|---|
-| Linux | `$IDOT_OTEL_CPP_INSTALL/lib64/cmake/opentelemetry-cpp/` | `$IDOT_OTEL_CPP_INSTALL/lib64/` | `LD_LIBRARY_PATH` |
-| AIX | `$IDOT_OTEL_CPP_INSTALL/lib/cmake/opentelemetry-cpp/` | `$IDOT_OTEL_CPP_INSTALL/lib/` | `LIBPATH` |
-| Windows | `%IDOT_OTEL_CPP_INSTALL%\lib\cmake\opentelemetry-cpp\` | `%IDOT_OTEL_CPP_INSTALL%\bin\` | `PATH` |
-
-> If your SDK layout differs from the table above, pass the correct path directly to CMake: `cmake -B build -DCMAKE_PREFIX_PATH=<path>`.
-
----
-
-## Quick start
-
-```bash
-# 1. Clone and enter the directory
-git clone <repository-url>
-cd idot-cpp-distributed-tracing
-
-# 2. Build all three services
-IDOT_OTEL_CPP_INSTALL=<path-to-opentelemetry-cpp> ./build.sh
-
-# 3. Start all three services
-IDOT_OTEL_CPP_INSTALL=<path-to-opentelemetry-cpp> \
-OTEL_AGENT=<path-to-opentelemetry-javaagent.jar> \
-CPP_OTLP_ENDPOINT=<collector-host>:<grpc-port> \
-JAVA_OTLP_ENDPOINT=http://<collector-host>:<grpc-port> \
-./run.sh
-
-# 4. Trigger a trace
-curl http://<host>:8082/order
-
-# 5. Stop all services
-./stop.sh
-```
-
-See [Environment variables](#environment-variables) for a full description of each variable before you run.
-
----
-
 ## How it works
 
 ```
@@ -119,139 +75,176 @@ See [Environment variables](#environment-variables) for a full description of ea
   └──────────┬──────────┘
              │ OTLP/gRPC  (all three services export independently)
              ▼
-  OpenTelemetry Collector / Backend
+  OpenTelemetry Collector / Backend (e.g. <collector-host>:<grpc-port>)
 ```
 
 Each service exports its own spans to the configured OTLP/gRPC endpoint. The W3C `traceparent` header carries the trace context from service to service so all spans share the same trace ID.
 
 ---
 
-## Span tree
+## Prerequisites
 
-Each `GET /order` request produces the following trace waterfall:
+The C++ source code (`main.cpp`) and its build system (`CMakeLists.txt`) support **Windows**, **Linux**, and **AIX**.
 
-```
-java-caller   GET /order                                  SERVER  (auto-instrumented)
-│
-└─ java-caller  HTTP GET                                  CLIENT  (auto-instrumented)
-   │
-   └─ cpp-service  ProcessOrder                           SERVER
-      ├─ cpp-service  ValidateOrder                       INTERNAL
-      ├─ cpp-service  ReadCustomerDB                      CLIENT   (simulated)
-      ├─ cpp-service  ChargePayment                       CLIENT   (simulated)
-      ├─ cpp-service  UpdateInventory                     INTERNAL
-      ├─ cpp-service  PublishShipment                     PRODUCER (simulated)
-      └─ cpp-service  HTTP GET <java-receiver-url>/ping   CLIENT
-         │
-         └─ java-receiver  GET /ping                      SERVER   (auto-instrumented)
-```
+| Platform | Build script | Run script | Stop script |
+|---|---|---|---|
+| Linux / AIX | `build.sh` (Bash) | `run.sh` (Bash) | `stop.sh` (Bash) |
+| Windows | `build.ps1` (PowerShell) | `run.ps1` (PowerShell) | `stop.ps1` (PowerShell) |
 
-`ReadCustomerDB`, `ChargePayment`, and `PublishShipment` are simulated — they demonstrate OpenTelemetry semantic attributes for database, RPC, and messaging operations without requiring a real database, payment gateway, or message broker.
+### Software requirements
 
----
-
-## What the sample covers
-
-The instrumentation in [`cpp-service/src/main.cpp`](cpp-service/src/main.cpp) demonstrates:
-
-| Concept | Where in the code |
-|---|---|
-| SDK initialisation — tracer provider, OTLP/gRPC exporter, resource attributes | `InitTelemetry()` |
-| BatchSpanProcessor — async, buffered export | `InitTelemetry()` |
-| W3C Trace Context extraction — join the trace started by `java-caller` | `HandleOrder()` |
-| Span creation — `SERVER`, `CLIENT`, `INTERNAL`, `PRODUCER` span kinds | `HandleOrder()` |
-| Span attributes — HTTP, database, RPC, and messaging semantic conventions | `HandleOrder()` |
-| Span events — timestamped annotations attached to a span | `HandleOrder()` — `ChargePayment`, `PublishShipment` |
-| W3C Trace Context injection — propagate to `java-receiver` | `CallDownstream()` |
-| Span status — `kOk` and `kError` | `CallDownstream()`, `HandleOrder()` |
-| Graceful shutdown — `ForceFlush` then `Shutdown` | `ShutdownTelemetry()`, `main()` |
-
-The Java services use the OpenTelemetry Java Agent for automatic instrumentation — no manual instrumentation is required in their code.
-
----
-
-## Project structure
-
-```
-idot-cpp-distributed-tracing/
-├── build.sh                     — build all three services         (Linux / AIX)
-├── build.ps1                    — build all three services         (Windows)
-├── run.sh                       — start all three services         (Linux / AIX)
-├── run.ps1                      — start all three services         (Windows)
-├── stop.sh                      — stop all running services        (Linux / AIX)
-├── stop.ps1                     — stop all running services        (Windows)
-│
-├── images/
-│   └── distributed_tracing.jpg  — Instana trace waterfall screenshot
-│
-├── cpp-service/                 ← IDOT OTel C++ SDK instrumentation is here
-│   ├── CMakeLists.txt
-│   ├── vendor/httplib.h         — vendored header-only HTTP server
-│   └── src/main.cpp             — full OTel C++ SDK instrumentation example
-│
-├── java-caller/                 — Spring Boot, exposes GET /order
-│   ├── pom.xml
-│   └── src/main/java/com/example/demo/CallerApplication.java
-│
-└── java-receiver/               — Spring Boot, answers GET /ping
-    ├── pom.xml
-    └── src/main/java/com/example/demo/ReceiverApplication.java
-```
-
----
-
-## Environment variables
-
-Configure these variables for your environment before running `build.sh` or `run.sh`.
-
-### Required
-
-| Variable | Used by | Description |
+| Requirement | Minimum version | Notes |
 |---|---|---|
-| `IDOT_OTEL_CPP_INSTALL` | `build.sh`, `run.sh` | Absolute path to the root of the IDOT OpenTelemetry C++ SDK install directory. Used by CMake at build time (`CMAKE_PREFIX_PATH`) and added to the platform runtime library path at run time (see [SDK directory layout by platform](#sdk-directory-layout-by-platform)). |
-| `OTEL_AGENT` | `run.sh` | Absolute path to the OpenTelemetry Java Agent JAR. Attached to `java-caller` and `java-receiver` via `-javaagent`. |
+| C++ compiler | C++17 capable | Linux: GCC (`g++ --version`) · AIX: XL C++ or GCC from AIX Toolbox · Windows: MSVC via **Developer PowerShell for VS 2022** |
+| CMake | 3.16 | `cmake --version` — available from AIX Toolbox on AIX |
+| Bash | 4.0 or later | Linux/AIX only. AIX ships `/bin/sh` (ksh) — install Bash from AIX Toolbox: `rpm -i bash-*.rpm` |
+| libcurl | any | Linux: `dnf install libcurl-devel` or `apt install libcurl4-openssl-dev` · AIX: `rpm -i curl-devel-*.rpm` · Windows: must be an **MSVC build** — see [Windows curl note](#windows-curl-note) below |
+| IDOT OpenTelemetry C++ SDK | — | An installed or extracted SDK directory. Set via `IDOT_OTEL_CPP_INSTALL`. See [SDK directory layout](#sdk-directory-layout-by-platform). |
+| Java | 8 or later | `java -version` |
+| Maven | 3.6 or later | `mvn --version` |
+| OpenTelemetry Java Agent JAR | — | Download once from [opentelemetry-java-instrumentation releases](https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases). Set path via `OTEL_AGENT`. |
+| OTLP/gRPC backend or collector | — | Must be running **before** the services start. See [Step 0](#step-0--set-up-your-collector-or-backend). |
 
-### Collector / backend endpoints
+### SDK directory layout by platform
 
-Both variables default to `localhost:4317` / `http://localhost:4317`. Set them if your collector is on a different host or port.
+The IDOT OpenTelemetry C++ SDK install directory structure differs by platform. CMake locates headers and libraries through `IDOT_OTEL_CPP_INSTALL`; the shared libraries must also be on the runtime library search path.
 
-| Variable | Used by | Format | Default |
+| Platform | CMake config file location | Shared library location | Runtime path variable |
 |---|---|---|---|
-| `CPP_OTLP_ENDPOINT` | `run.sh` → `cpp-service` | Bare `host:port` — **no** URL scheme | `localhost:4317` |
-| `JAVA_OTLP_ENDPOINT` | `run.sh` → `java-caller`, `java-receiver` | Full URL `http://host:port` | `http://localhost:4317` |
+| Linux | `$IDOT_OTEL_CPP_INSTALL/lib64/cmake/opentelemetry-cpp/` | `$IDOT_OTEL_CPP_INSTALL/lib64/` | `LD_LIBRARY_PATH` |
+| AIX | `$IDOT_OTEL_CPP_INSTALL/lib/cmake/opentelemetry-cpp/` | `$IDOT_OTEL_CPP_INSTALL/lib/` | `LIBPATH` |
+| Windows | `%IDOT_OTEL_CPP_INSTALL%\lib\cmake\opentelemetry-cpp\` | `%IDOT_OTEL_CPP_INSTALL%\bin\` | `PATH` (set by `run.ps1`) |
 
-> `CPP_OTLP_ENDPOINT` and `JAVA_OTLP_ENDPOINT` must be set **independently**. The C++ gRPC exporter requires a bare `host:port`; the Java Agent requires a full `http://` URL. If your collector is remote, set both.
+> If your SDK layout differs from the table above, pass the correct path directly to CMake: `cmake -B build -DCMAKE_PREFIX_PATH=<path>`.
 
-### Scheduler
+### Windows curl note
 
-| Variable | Used by | Description | Default |
-|---|---|---|---|
-| `SCHEDULE_ENABLED` | `run.sh` → `java-caller` | `true` — `java-caller` automatically sends one `GET /order` every 5 seconds. `false` — send requests manually with `curl`. | `false` — trigger traces manually with `curl http://<host>:8082/order`. Set to `true` for continuous traffic. |
+Prebuilt packages from [curl.se/windows](https://curl.se/windows/) are **MinGW/GCC builds** — they contain `.dll.a` / `.a` import libraries, **not** `.lib` files. MSVC's linker cannot use them. You have two options:
 
-### Service ports and inter-service URLs
+- **Build curl from source** in Developer PowerShell using CMake — this produces a native `libcurl.lib` and `libcurl.dll`.
+- **Use vcpkg** — `vcpkg install curl:x64-windows` downloads, builds, and installs an MSVC-native curl automatically.
 
-`run.sh` hard-codes the ports and service-to-service URLs below. Setting these variables externally before calling `run.sh` has no effect — edit `run.sh` directly if you need different values.
+After building, `libcurl.dll` and `opentelemetry_cpp.dll` are both copied next to `cpp-service.exe` automatically as part of the CMake post-build step.
 
-| Variable | Consumed by | Description | Value in `run.sh` |
-|---|---|---|---|
-| `SERVER_PORT` | `cpp-service` | TCP port `cpp-service` listens on. | `8080` |
-| `SERVER_HOST` | `cpp-service` | Hostname written into `cpp-service` span attributes. Does not change the bind address (`0.0.0.0`). | _(not set by `run.sh`)_ |
-| `JAVA_RECEIVER_URL` | `cpp-service` | Base URL of `java-receiver`. `cpp-service` appends `/ping` for the downstream call. | `http://localhost:8081` |
-| `CPP_SERVICE_URL` | `java-caller` | Base URL of `cpp-service`. `java-caller` calls `$CPP_SERVICE_URL/order`. | `http://localhost:8080` |
+---
 
-### Service names
+## Quick start
 
-`run.sh` assigns a distinct `OTEL_SERVICE_NAME` to each service. These values are fixed in the script and appear as separate service nodes in your observability backend.
+If you already have all prerequisites in place, here is the minimal command sequence for each platform. If you are setting up for the first time, follow the numbered steps starting at [Step 0](#step-0--set-up-your-collector-or-backend) instead.
 
-| Service | `OTEL_SERVICE_NAME` |
+### Linux / AIX
+
+```bash
+# 1. Download the OpenTelemetry Java Agent (once)
+curl -L -o opentelemetry-javaagent.jar \
+  https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar
+
+# 2. Build all three services
+cd idot-cpp-distributed-tracing
+IDOT_OTEL_CPP_INSTALL=<path-to-opentelemetry-cpp> ./build.sh
+
+# 3. Start your collector or backend first, then start the services
+IDOT_OTEL_CPP_INSTALL=<path-to-opentelemetry-cpp> \
+OTEL_AGENT=<path-to-opentelemetry-javaagent.jar> \
+CPP_OTLP_ENDPOINT=<collector-host>:<grpc-port> \
+JAVA_OTLP_ENDPOINT=http://<collector-host>:<grpc-port> \
+./run.sh
+
+# 4. Trigger a trace (wait ~20 s for the JVMs to start)
+curl http://$(hostname -f):8082/order
+
+# 5. Stop all services
+./stop.sh
+```
+
+### Windows (Developer PowerShell for VS 2022)
+
+```powershell
+# 1. Download the OpenTelemetry Java Agent (once)
+Invoke-WebRequest `
+  -Uri "https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar" `
+  -OutFile "$HOME\Downloads\opentelemetry-javaagent.jar"
+
+# 2. Build all three services
+cd idot-cpp-distributed-tracing
+$env:IDOT_OTEL_CPP_INSTALL = "<path-to-opentelemetry-cpp>"
+$env:CURL_INCLUDE_DIR       = "<path-to-curl>\include"
+$env:CURL_LIBRARY           = "<path-to-curl>\lib\libcurl.lib"
+.\build.ps1
+
+# 3. Start your collector or backend first, then start the services
+$env:IDOT_OTEL_CPP_INSTALL = "<path-to-opentelemetry-cpp>"
+$env:OTEL_AGENT             = "$HOME\Downloads\opentelemetry-javaagent.jar"
+$env:CPP_OTLP_ENDPOINT      = "<collector-host>:<grpc-port>"
+$env:JAVA_OTLP_ENDPOINT     = "http://<collector-host>:<grpc-port>"
+.\run.ps1
+
+# 4. Trigger a trace (wait ~20 s for the JVMs to start)
+curl.exe http://localhost:8082/order
+
+# 5. Stop all services
+.\stop.ps1
+```
+
+See [Environment variables reference](#environment-variables-reference) for a full description of each variable.
+
+---
+
+## Step 0 — Set up your collector or backend
+
+> **This step must be completed before starting the services.** If no OTLP/gRPC listener is running at the configured endpoint when `cpp-service` starts, the gRPC channel will log `Connection refused` errors. The channel reconnects automatically once the collector is up, but starting it first avoids the noise.
+
+This sample exports spans over **OTLP/gRPC** and works with any OpenTelemetry-compatible backend.
+
+### Option A — Collector on the same host (simplest)
+
+Install an OTLP-capable agent or collector on the same machine. It must listen on `<grpc-port>` (default `4317`) for OTLP/gRPC. Examples:
+
+- **OpenTelemetry Collector** — [opentelemetry.io/docs/collector](https://opentelemetry.io/docs/collector/)
+- **IBM Instana agent** — [Installing host agents](https://www.ibm.com/docs/en/instana-observability?topic=agents-installing-host); accepts OTLP on port 4317 by default
+- **Jaeger** (v1.35+) — accepts OTLP/gRPC directly on port 4317
+
+Verify the collector is listening on `<grpc-port>` before proceeding:
+
+| Platform | Command |
 |---|---|
-| `java-caller` | `java-caller` |
-| `cpp-service` | `cpp-service` |
-| `java-receiver` | `java-receiver` |
+| Linux | `nc -zv <collector-host> <grpc-port>` |
+| AIX | `netstat -an \| grep <grpc-port>` |
+| Windows | `Test-NetConnection <collector-host> -Port <grpc-port>` |
+
+### Option B — Remote collector
+
+If the collector is on a different host, set `CPP_OTLP_ENDPOINT` and `JAVA_OTLP_ENDPOINT` when you start the services in [Step 2](#step-2--start-the-services).
+
+For a standalone OpenTelemetry Collector, a minimal configuration that receives OTLP/gRPC and forwards to a backend is:
+
+```yaml
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:<grpc-port>"
+
+exporters:
+  otlp/backend:
+    endpoint: "<backend-host>:<port>"
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [otlp/backend]
+```
+
+Replace `otlp/backend` with the exporter for your backend (Jaeger, Zipkin, a SaaS platform, etc.). See the [OpenTelemetry Collector documentation](https://opentelemetry.io/docs/collector/) for all available exporters.
 
 ---
 
 ## Step 1 — Build
+
+Before building, ensure all [software requirements](#software-requirements) are met and `IDOT_OTEL_CPP_INSTALL` points to your SDK directory.
 
 ### Linux
 
@@ -270,44 +263,53 @@ cd idot-cpp-distributed-tracing
 IDOT_OTEL_CPP_INSTALL=<path-to-opentelemetry-cpp> ./build.sh
 ```
 
-`build.sh` builds the three services in this order:
-1. `java-caller` → `java-caller/target/java-caller-1.0.0.jar`
-2. `java-receiver` → `java-receiver/target/java-receiver-1.0.0.jar`
-3. `cpp-service` → `cpp-service/build/cpp-service`
-
 ### Windows
 
 Open **Developer PowerShell for VS 2022** (*Start → Visual Studio 2022 → Developer PowerShell for VS 2022*).
 
-> **Execution policy:** If you see `cannot be loaded because running scripts is disabled`, run:
+> **Execution policy:** If you see `cannot be loaded because running scripts is disabled`, run once:
 > `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`
 
-`opentelemetry_cpp.dll` is copied next to `cpp-service.exe` automatically after each build. The OpenSSL DLLs must also be on `PATH` before running — add your OpenSSL `bin\` directory to `PATH` first:
+Supply the paths to your MSVC-built curl (see [Windows curl note](#windows-curl-note)):
 
 ```powershell
-$env:PATH = "C:\Program Files\OpenSSL-Win64\bin;$env:PATH"
 $env:IDOT_OTEL_CPP_INSTALL = "<path-to-opentelemetry-cpp>"
+$env:CURL_INCLUDE_DIR       = "<path-to-curl>\include"
+$env:CURL_LIBRARY           = "<path-to-curl>\lib\libcurl.lib"
 .\build.ps1
 ```
 
-Parameters can also be passed directly:
+Or pass them directly as parameters:
 
 ```powershell
-.\build.ps1 -IdotOtelCppInstall "<path-to-opentelemetry-cpp>"
+.\build.ps1 -IdotOtelCppInstall "<path-to-opentelemetry-cpp>" `
+            -CurlIncludeDir     "<path-to-curl>\include" `
+            -CurlLibrary        "<path-to-curl>\lib\libcurl.lib"
 ```
 
-`build.ps1` builds the three services in this order:
-1. `java-caller` → `java-caller\target\java-caller-1.0.0.jar`
-2. `java-receiver` → `java-receiver\target\java-receiver-1.0.0.jar`
-3. `cpp-service` → `cpp-service\build\Release\cpp-service.exe`
+### What gets built
 
-It uses `$env:NUMBER_OF_PROCESSORS` for the parallel build (PowerShell equivalent of `nproc`).
+All three platforms produce the same three artefacts:
+
+| # | Service | Output (Linux/AIX) | Output (Windows) |
+|---|---|---|---|
+| 1 | `java-caller` | `java-caller/target/java-caller-1.0.0.jar` | `java-caller\target\java-caller-1.0.0.jar` |
+| 2 | `java-receiver` | `java-receiver/target/java-receiver-1.0.0.jar` | `java-receiver\target\java-receiver-1.0.0.jar` |
+| 3 | `cpp-service` | `cpp-service/build/cpp-service` | `cpp-service\build\Release\cpp-service.exe` |
+
+On Windows, `libcurl.dll` and `opentelemetry_cpp.dll` are automatically copied next to `cpp-service.exe` by CMake post-build steps.
+
+Once the build succeeds, proceed to [Step 2](#step-2--start-the-services).
 
 ---
 
 ## Step 2 — Start the services
 
-### Linux and AIX — default (collector on the same host)
+> **Prerequisite:** Complete [Step 0](#step-0--set-up-your-collector-or-backend) — your collector or backend must be running before starting the services.
+
+The run scripts start all three services in the correct order (`java-receiver` → `cpp-service` → `java-caller`) and redirect each service's output to a log file under `logs/`.
+
+### Linux and AIX — collector on the same host
 
 ```bash
 IDOT_OTEL_CPP_INSTALL=<path-to-opentelemetry-cpp> \
@@ -336,8 +338,16 @@ SCHEDULE_ENABLED=true \
 
 ### Windows
 
-`run.ps1` starts each service as a background process using `System.Diagnostics.Process`, redirects stdout and stderr to the `logs\` directory, and writes a `.pids.json` file so `stop.ps1` can terminate the correct processes. It also adds `$IdotOtelCppInstall\bin` to `PATH` for any additional SDK DLLs.
+`run.ps1` starts each service as a background process using `System.Diagnostics.Process`, redirects stdout and stderr to `logs\`, and writes `.pids.json` so `stop.ps1` can terminate the correct processes. It also adds `$IdotOtelCppInstall\bin` to `PATH` for the SDK DLLs.
 
+**Collector on the same host:**
+```powershell
+$env:IDOT_OTEL_CPP_INSTALL = "<path-to-opentelemetry-cpp>"
+$env:OTEL_AGENT             = "<path-to-opentelemetry-javaagent.jar>"
+.\run.ps1
+```
+
+**Remote collector:**
 ```powershell
 $env:IDOT_OTEL_CPP_INSTALL = "<path-to-opentelemetry-cpp>"
 $env:OTEL_AGENT             = "<path-to-opentelemetry-javaagent.jar>"
@@ -346,76 +356,72 @@ $env:JAVA_OTLP_ENDPOINT     = "http://<collector-host>:<grpc-port>"
 .\run.ps1
 ```
 
-Parameters can also be passed directly:
-
+**Continuous traffic (automatic scheduler):**
 ```powershell
-.\run.ps1 `
-    -IdotOtelCppInstall "<path-to-opentelemetry-cpp>" `
-    -OtelAgent          "<path-to-opentelemetry-javaagent.jar>" `
-    -CppOtlpEndpoint    "<collector-host>:<grpc-port>" `
-    -JavaOtlpEndpoint   "http://<collector-host>:<grpc-port>" `
-    -ScheduleEnabled    $true
+$env:IDOT_OTEL_CPP_INSTALL = "<path-to-opentelemetry-cpp>"
+$env:OTEL_AGENT             = "<path-to-opentelemetry-javaagent.jar>"
+.\run.ps1 -ScheduleEnabled $true
 ```
 
----
+### Confirming all services are up
 
-After startup, each service writes logs to the `logs/` directory:
+After starting, check the logs before sending requests. Each service writes to `logs/`:
 
-| Service | Default port | Log file |
-|---|---|---|
-| `java-caller` | `8082` | `logs/java-caller.log` |
-| `cpp-service` | `8080` | `logs/cpp-service.log` |
-| `java-receiver` | `8081` | `logs/java-receiver.log` |
+| Service | Port | Log file | Ready when you see |
+|---|---|---|---|
+| `java-receiver` | `8081` | `logs/java-receiver.log` | `Started ReceiverApplication in ...` |
+| `cpp-service` | `8080` | `logs/cpp-service.log` | `Listening on :8080 — waiting for requests from java-caller...` |
+| `java-caller` | `8082` | `logs/java-caller.log` | `Started CallerApplication in ...` |
 
-Confirm all three services are up before sending a request. Look for these lines in the logs:
-
-```
-# logs/java-caller.log
-Started CallerApplication in ...
-
-# logs/cpp-service.log
-Listening on :8080 — waiting for requests from java-caller...
-
-# logs/java-receiver.log
-Started ReceiverApplication in ...
-```
+> **The JVM takes ~20 seconds to start.** Wait for all three "ready" lines before proceeding to [Step 3](#step-3--trigger-a-trace).
+>
+> Monitor in real time:
+> - **Linux/AIX:** `tail -f logs/java-caller.log`
+> - **Windows:** `Get-Content logs\java-caller.log -Wait`
 
 ---
 
 ## Step 3 — Trigger a trace
 
-Send a single request to `java-caller`:
+Once all three services are up (see [Confirming all services are up](#confirming-all-services-are-up)), send a single request to `java-caller`:
 
+**Linux / AIX:**
 ```bash
-curl http://<host>:8082/order
+curl http://$(hostname -f):8082/order
+```
+
+**Windows:**
+```powershell
+curl.exe http://localhost:8082/order
 ```
 
 Expected response:
-
 ```
 order processed — notify: pong
 ```
 
-The `cpp-service` log prints the extracted and injected `traceparent` values so you can confirm context propagation:
+The `cpp-service` log immediately prints the extracted and injected `traceparent` values, confirming context propagation across all three services:
 
 ```
 [cpp-service] Extracted traceparent from java-caller : 00-<traceId>-<spanId>-01
 [cpp-service] Injected  traceparent into java-receiver: 00-<traceId>-<spanId>-01
 ```
 
-The trace ID shown in both lines is the same — that is the trace ID shared across all three services.
+The trace ID is identical in both lines — that is the single trace ID shared by `java-caller`, `cpp-service`, and `java-receiver` in your backend.
+
+Once you see the expected response, proceed to [Step 4](#step-4--view-and-verify-traces).
 
 ---
 
 ## Step 4 — View and verify traces
 
-Open your observability backend. Filter by `service.name = cpp-service` or operation name `ProcessOrder`. The trace waterfall should show all three services linked under a single trace ID.
+Open your observability backend and filter by `service.name = cpp-service` or operation name `ProcessOrder`. The trace waterfall should show all three services linked under a single trace ID.
 
-The screenshot below shows an example trace as it appears in **IBM Instana**. The same end-to-end waterfall is visible in any OTLP-compatible backend.
+The screenshot below shows an example trace as it appears in IBM Instana. The same end-to-end waterfall is visible in any OTLP-compatible backend (Jaeger, Zipkin, Grafana Tempo, etc.).
 
-![Distributed trace waterfall in IBM Instana showing all three services — java-caller, cpp-service, and java-receiver — linked under a single trace ID](images/distributed_tracing.jpg)
+![Distributed trace waterfall showing all three services — java-caller, cpp-service, and java-receiver — linked under a single trace ID](images/distributed_tracing.jpg)
 
-*IBM Instana — end-to-end distributed trace. The `ProcessOrder` SERVER span in `cpp-service` contains all expected child spans: `ValidateOrder` (INTERNAL, 8ms), `ReadCustomerDB` (DATABASE, 22ms), `ChargePayment` (RPC, 35ms), `UpdateInventory` (INTERNAL, 12ms), `PublishShipment` (MESSAGING, 19ms), and `GET /ping` (HTTP, 9ms) — which continues the trace into `java-receiver`. Total root call latency: 112ms.*
+*End-to-end distributed trace (IBM Instana). The `ProcessOrder` SERVER span in `cpp-service` contains all expected child spans: `ValidateOrder` (INTERNAL, 8ms), `ReadCustomerDB` (DATABASE, 22ms), `ChargePayment` (RPC, 35ms), `UpdateInventory` (INTERNAL, 12ms), `PublishShipment` (MESSAGING, 18ms), and `GET /ping` (HTTP, 9ms) — which continues the trace into `java-receiver`. Total root call latency: ~111ms.*
 
 **Confirm the following:**
 
@@ -445,43 +451,169 @@ The screenshot below shows an example trace as it appears in **IBM Instana**. Th
 
 ---
 
-## Connecting to an OpenTelemetry Collector
+## Environment variables reference
 
-This sample exports spans over OTLP/gRPC and works with any OpenTelemetry Collector or OTLP-compliant backend.
+This section is a full reference for all variables used by the build and run scripts. The [Quick start](#quick-start) and individual step sections show the minimal set needed for each scenario.
 
-### Starting with a remote collector
+### Required on all platforms
+
+| Variable | Used by | Description |
+|---|---|---|
+| `IDOT_OTEL_CPP_INSTALL` | `build.sh` / `build.ps1`, `run.sh` / `run.ps1` | Absolute path to the root of the IDOT OpenTelemetry C++ SDK install directory. Used by CMake at build time (`CMAKE_PREFIX_PATH`) and by the run scripts to set the runtime library path. |
+| `OTEL_AGENT` | `run.sh` / `run.ps1` | Absolute path to the OpenTelemetry Java Agent JAR. Attached to `java-caller` and `java-receiver` via `-javaagent`. |
+
+### Windows-only build variables
+
+Required by `build.ps1` to locate the MSVC-compatible curl headers and import library. See [Windows curl note](#windows-curl-note).
+
+| Variable | Description |
+|---|---|
+| `CURL_INCLUDE_DIR` | Directory containing `curl\curl.h` (e.g. `C:\curl-msvc\include`). |
+| `CURL_LIBRARY` | Full path to the MSVC curl import library (e.g. `C:\curl-msvc\lib\libcurl.lib`). Must be a `.lib` — not a MinGW `.a` file. |
+
+### Collector / backend endpoints
+
+Both variables default to `localhost:4317` / `http://localhost:4317`. Set them if your collector is on a different host or port.
+
+| Variable | Used by | Format | Default |
+|---|---|---|---|
+| `CPP_OTLP_ENDPOINT` | `run.sh` / `run.ps1` → `cpp-service` | Bare `host:port` — **no** URL scheme | `localhost:4317` |
+| `JAVA_OTLP_ENDPOINT` | `run.sh` / `run.ps1` → `java-caller`, `java-receiver` | Full URL `http://host:port` | `http://localhost:4317` |
+
+> `CPP_OTLP_ENDPOINT` and `JAVA_OTLP_ENDPOINT` must be set **independently**. The C++ gRPC exporter requires a bare `host:port`; the Java Agent requires a full `http://` URL. If your collector is remote, set both.
+
+### Scheduler
+
+| Variable | Used by | Description | Default |
+|---|---|---|---|
+| `SCHEDULE_ENABLED` | `run.sh` / `run.ps1` → `java-caller` | `true` — `java-caller` automatically sends one `GET /order` every 5 seconds. `false` — trigger traces manually with `curl`. | `false` |
+
+### Service ports and inter-service URLs
+
+All port and URL variables can be set as environment variables or passed as parameters to `run.ps1`. The inter-service URLs default to `localhost` with the corresponding port, but can be overridden independently when services run on different hosts.
+
+| Variable | Consumed by | Description | Default |
+|---|---|---|---|
+| `SERVER_PORT` | `run.sh` / `run.ps1` → `cpp-service` | TCP port `cpp-service` listens on. | `8080` |
+| `JAVA_RECEIVER_PORT` | `run.sh` / `run.ps1` → `java-receiver` | TCP port `java-receiver` listens on. | `8081` |
+| `JAVA_CALLER_PORT` | `run.sh` / `run.ps1` → `java-caller` | TCP port `java-caller` listens on. | `8082` |
+| `JAVA_RECEIVER_URL` | `run.sh` / `run.ps1` → `cpp-service` | Base URL `cpp-service` uses to call `java-receiver`. Defaults to `http://localhost:$JAVA_RECEIVER_PORT`. | `http://localhost:8081` |
+| `CPP_SERVICE_URL` | `run.sh` / `run.ps1` → `java-caller` | Base URL `java-caller` uses to call `cpp-service`. Defaults to `http://localhost:$SERVER_PORT`. | `http://localhost:8080` |
+| `SERVER_HOST` | `cpp-service` | Hostname written into span attributes only. Does not change the bind address (`0.0.0.0`). | _(not set)_ |
+
+**Example — run all services on non-default ports:**
 
 ```bash
-IDOT_OTEL_CPP_INSTALL=<path-to-opentelemetry-cpp> \
-OTEL_AGENT=<path-to-opentelemetry-javaagent.jar> \
-CPP_OTLP_ENDPOINT=<collector-host>:<grpc-port> \
-JAVA_OTLP_ENDPOINT=http://<collector-host>:<grpc-port> \
-./run.sh
+# Linux / AIX
+SERVER_PORT=9080 JAVA_RECEIVER_PORT=9081 JAVA_CALLER_PORT=9082 \
+IDOT_OTEL_CPP_INSTALL=<path> OTEL_AGENT=<path> ./run.sh
 ```
 
-### Minimal Collector configuration
-
-```yaml
-receivers:
-  otlp:
-    protocols:
-      grpc:
-        endpoint: "0.0.0.0:<grpc-port>"
-
-exporters:
-  otlp/backend:
-    endpoint: "<backend-host>:<port>"
-    tls:
-      insecure: true
-
-service:
-  pipelines:
-    traces:
-      receivers: [otlp]
-      exporters: [otlp/backend]
+```powershell
+# Windows
+.\run.ps1 -IdotOtelCppInstall "<path>" -OtelAgent "<path>" `
+          -ServerPort 9080 -JavaReceiverPort 9081 -JavaCallerPort 9082
 ```
 
-Replace `otlp/backend` with the exporter for your backend (Jaeger, Zipkin, a SaaS platform, etc.). See the [OpenTelemetry Collector documentation](https://opentelemetry.io/docs/collector/) for all available exporters and configuration options.
+**Example — services on different hosts:**
+
+```bash
+# Linux / AIX
+JAVA_RECEIVER_URL=http://receiver-host:8081 \
+CPP_SERVICE_URL=http://cpp-host:8080 \
+IDOT_OTEL_CPP_INSTALL=<path> OTEL_AGENT=<path> ./run.sh
+```
+
+```powershell
+# Windows
+.\run.ps1 -IdotOtelCppInstall "<path>" -OtelAgent "<path>" `
+          -JavaReceiverUrl "http://receiver-host:8081" `
+          -CppServiceUrl   "http://cpp-host:8080"
+```
+
+### Service names
+
+The run scripts assign a distinct `OTEL_SERVICE_NAME` to each service. These values are fixed and appear as separate service nodes in your observability backend.
+
+| Service | `OTEL_SERVICE_NAME` |
+|---|---|
+| `java-caller` | `java-caller` |
+| `cpp-service` | `cpp-service` |
+| `java-receiver` | `java-receiver` |
+
+---
+
+## Project structure
+
+```
+idot-cpp-distributed-tracing/
+├── build.sh                     — build all three services         (Linux / AIX)
+├── build.ps1                    — build all three services         (Windows)
+├── run.sh                       — start all three services         (Linux / AIX)
+├── run.ps1                      — start all three services         (Windows)
+├── stop.sh                      — stop all running services        (Linux / AIX)
+├── stop.ps1                     — stop all running services        (Windows)
+│
+├── images/
+│   └── distributed_tracing.jpg  — example trace waterfall screenshot
+│
+├── cpp-service/                 ← IDOT OTel C++ SDK instrumentation is here
+│   ├── CMakeLists.txt
+│   ├── vendor/httplib.h         — vendored header-only HTTP server
+│   └── src/main.cpp             — full OTel C++ SDK instrumentation example
+│
+├── java-caller/                 — Spring Boot, exposes GET /order
+│   ├── pom.xml
+│   └── src/main/java/com/example/demo/CallerApplication.java
+│
+└── java-receiver/               — Spring Boot, answers GET /ping
+    ├── pom.xml
+    └── src/main/java/com/example/demo/ReceiverApplication.java
+```
+
+---
+
+## Span tree
+
+Each `GET /order` request produces the following trace waterfall. This is what you should see in [Step 4](#step-4--view-and-verify-traces).
+
+```
+java-caller   GET /order                                  SERVER  (auto-instrumented)
+│
+└─ java-caller  HTTP GET                                  CLIENT  (auto-instrumented)
+   │
+   └─ cpp-service  ProcessOrder                           SERVER
+      ├─ cpp-service  ValidateOrder                       INTERNAL
+      ├─ cpp-service  ReadCustomerDB                      CLIENT   (simulated)
+      ├─ cpp-service  ChargePayment                       CLIENT   (simulated)
+      ├─ cpp-service  UpdateInventory                     INTERNAL
+      ├─ cpp-service  PublishShipment                     PRODUCER (simulated)
+      └─ cpp-service  HTTP GET <java-receiver-url>/ping   CLIENT
+         │
+         └─ java-receiver  GET /ping                      SERVER   (auto-instrumented)
+```
+
+`ReadCustomerDB`, `ChargePayment`, and `PublishShipment` are simulated — they demonstrate OpenTelemetry semantic attributes for database, RPC, and messaging operations without requiring a real database, payment gateway, or message broker.
+
+---
+
+## What the sample covers
+
+The instrumentation in [`cpp-service/src/main.cpp`](cpp-service/src/main.cpp) demonstrates the key OTel C++ SDK patterns needed in any production service:
+
+| Concept | Where in the code |
+|---|---|
+| SDK initialisation — tracer provider, OTLP/gRPC exporter, resource attributes | `InitTelemetry()` |
+| SimpleSpanProcessor — synchronous, per-span export | `InitTelemetry()` |
+| W3C Trace Context extraction — join the trace started by `java-caller` | `HandleOrder()` |
+| Span creation — `SERVER`, `CLIENT`, `INTERNAL`, `PRODUCER` span kinds | `HandleOrder()` |
+| Span attributes — HTTP, database, RPC, and messaging semantic conventions | `HandleOrder()` |
+| Span events — timestamped annotations attached to a span | `HandleOrder()` — `ChargePayment`, `PublishShipment` |
+| W3C Trace Context injection — propagate to `java-receiver` | `CallDownstream()` |
+| Span status — `kOk` and `kError` | `CallDownstream()`, `HandleOrder()` |
+| Graceful shutdown — `ForceFlush` then `Shutdown` | `ShutdownTelemetry()`, `main()` |
+
+The Java services use the OpenTelemetry Java Agent for automatic instrumentation — no manual instrumentation is required in their code.
 
 ---
 
@@ -493,7 +625,7 @@ The patterns in [`cpp-service/src/main.cpp`](cpp-service/src/main.cpp) are desig
 
 Call `InitTelemetry()` (or equivalent) before serving any requests. This sets up:
 - The **OTLP/gRPC exporter** — points to your collector via `OTEL_EXPORTER_OTLP_ENDPOINT`
-- The **BatchSpanProcessor** — buffers and exports spans asynchronously so instrumentation does not block request handling
+- The **SimpleSpanProcessor** — exports each span synchronously as it ends; swap for `BatchSpanProcessorFactory` in production for non-blocking, buffered export
 - **Resource attributes** — `service.name`, `host.name`, `process.pid` — attached to every span this process emits
 - The **global W3C propagator** — registers `HttpTraceContext` so `Extract` and `Inject` work correctly
 
@@ -530,8 +662,8 @@ trace::Scope root_scope(root);   // makes root the active span on this thread
 Add HTTP semantic attributes so your backend correlates this SERVER span with the CLIENT span from the caller:
 
 ```cpp
-root->SetAttribute("http.method",  req.method);   // "GET", "POST", ...
-root->SetAttribute("http.route",   "/your-path");
+root->SetAttribute("http.method",    req.method);   // "GET", "POST", ...
+root->SetAttribute("http.route",     "/your-path");
 root->SetAttribute("server.address", srv_host);
 root->SetAttribute("server.port",    srv_port);
 ```
@@ -611,7 +743,7 @@ After the request is complete, detach the extracted context:
 ctx::RuntimeContext::Detach(*token);
 ```
 
-At process shutdown, flush and release the SDK before exiting. Without this, spans still buffered in the `BatchSpanProcessor` queue are lost:
+At process shutdown, flush and release the SDK before exiting. Without this, spans still in-flight (or buffered if using `BatchSpanProcessor`) are lost:
 
 ```cpp
 g_provider->ForceFlush(std::chrono::milliseconds(10'000));
@@ -638,18 +770,21 @@ See the full [OpenTelemetry Semantic Conventions](https://opentelemetry.io/docs/
 
 ### No spans appear in the backend
 
-1. **Verify the OTLP endpoint variables are set correctly.**
-   - `CPP_OTLP_ENDPOINT` must be a bare `host:port` with no scheme (e.g. `collector:4317`). This applies on all platforms — Linux, AIX, and Windows (`run.ps1` maps it to `OTEL_EXPORTER_OTLP_ENDPOINT` internally).
+1. **Verify the collector was running before the services started.** If `cpp-service` started before the collector, check `logs/cpp-service.log` for `Connection refused`. The gRPC channel reconnects automatically — wait 30 seconds and trigger a new request before assuming the connection is broken.
+
+2. **Verify the OTLP endpoint variables are set correctly.**
+   - `CPP_OTLP_ENDPOINT` must be a bare `host:port` with no scheme (e.g. `collector:4317`).
    - `JAVA_OTLP_ENDPOINT` must be a full URL (e.g. `http://collector:4317`).
-2. **Check the collector is reachable** from the host running the services.
+
+3. **Check the collector is reachable** from the host running the services:
 
    | Platform | Command |
    |---|---|
    | Linux | `nc -zv <collector-host> <grpc-port>` |
    | AIX | `netstat -an \| grep <grpc-port>` |
-   | Windows | `Test-NetConnection <collector-host> -Port <grpc-port>` (PowerShell) |
+   | Windows | `Test-NetConnection <collector-host> -Port <grpc-port>` |
 
-3. **Check the log files** under `logs/` for connection errors or stack traces.
+4. **Check the log files** under `logs/` for connection errors or stack traces.
 
 ### `cpp-service` fails to start — shared library not found
 
@@ -661,7 +796,23 @@ The SDK shared libraries must be on the runtime library search path. Verify by p
 | AIX | `ls $IDOT_OTEL_CPP_INSTALL/lib/libopentelemetry*.so` | `LIBPATH` |
 | Windows | `dir %IDOT_OTEL_CPP_INSTALL%\bin\opentelemetry*.dll` | `PATH` |
 
-`run.sh` automatically detects AIX via `uname` and sets `LIBPATH` pointing to `$IDOT_OTEL_CPP_INSTALL/lib`. On Linux it sets `LD_LIBRARY_PATH` pointing to `lib64/`. On Windows, add the SDK `bin\` directory to `PATH`.
+`run.sh` sets `LD_LIBRARY_PATH` (Linux) or `LIBPATH` (AIX) automatically. `run.ps1` adds the SDK `bin\` directory to `PATH`.
+
+### `cpp-service.exe` crashes silently on Windows — `libcurl.dll` not found
+
+If `cpp-service` exits immediately with no log output, a required DLL is missing. Verify both DLLs are present next to the executable:
+
+```powershell
+Get-ChildItem "cpp-service\build\Release\*.dll"
+# Expected: libcurl.dll  and  opentelemetry_cpp.dll
+```
+
+If `libcurl.dll` is missing, copy it manually then rebuild so CMake's post-build step handles it going forward:
+
+```powershell
+Copy-Item "<path-to-curl>\bin\libcurl.dll" "cpp-service\build\Release\"
+.\build.ps1   # future builds copy it automatically
+```
 
 ### Build fails — `opentelemetry-cpp` package not found
 
@@ -683,11 +834,27 @@ The default ports are `8080` (`cpp-service`), `8081` (`java-receiver`), and `808
 | AIX | `netstat -an \| grep -E '8080\|8081\|8082'` |
 | Windows | `netstat -ano \| findstr "8080 8081 8082"` |
 
-To use different ports, edit the port assignments in `run.sh` (Linux/AIX) or `run.ps1` (Windows — update the `SERVER_PORT`, `JAVA_RECEIVER_URL`, and `CPP_SERVICE_URL` values in the `-ExtraEnv` and `-Arguments` sections), and update `JAVA_RECEIVER_URL` and `CPP_SERVICE_URL` to match.
+To use different ports, edit `run.sh` (Linux/AIX) or `run.ps1` (Windows) and update `SERVER_PORT`, `JAVA_RECEIVER_URL`, and `CPP_SERVICE_URL` to match.
 
 ### `curl` returns an error or no response
 
-Confirm `java-caller` is ready before sending requests — the JVM takes a few seconds to start. Check `logs/java-caller.log` for `Started CallerApplication`, then retry.
+The JVM takes ~20 seconds to fully start. Monitor the log and wait for `Started CallerApplication` before sending requests:
+
+**Linux / AIX:**
+```bash
+tail -f logs/java-caller.log
+```
+
+**Windows:**
+```powershell
+Get-Content logs\java-caller.log -Wait
+```
+
+Once you see `Started CallerApplication`, retry:
+
+**Linux / AIX:** `curl http://$(hostname -f):8082/order`
+
+**Windows:** `curl.exe http://localhost:8082/order`
 
 ### Trace shows only one or two services
 
