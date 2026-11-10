@@ -1,0 +1,1 @@
+Prior to building, running, and launching the following sample Java application, there are a few prerequisite steps that need to be followed. Please refer to the README.md located in the root of this repo to do this.
