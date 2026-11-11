@@ -255,6 +255,7 @@ start_minikube() {
 }
 
 CLIENT_APP_IMG="istio-otel-tracing-client-app:latest"
+MIDDLE_APP_IMG="istio-otel-tracing-middle-app:latest"
 SERVER_APP_IMG="istio-otel-tracing-server-app:latest"
 
 tag_and_push_img() {
@@ -269,11 +270,15 @@ build_and_push_images() {
   docker-compose build
   popd
   tag_and_push_img ${CLIENT_APP_IMG}
+  tag_and_push_img ${MIDDLE_APP_IMG}
   tag_and_push_img ${SERVER_APP_IMG}
 }
 
 CLIENT_YAML_IN="client-app-deployment.yaml.in"
 CLIENT_YAML_OUT=${CLIENT_YAML_IN%".in"}    # Drop .in suffix
+MIDDLE_YAML_IN="middle-app-deployment.yaml.in"
+MIDDLE_YAML_OUT=${MIDDLE_YAML_IN%".in"}    # Drop .in suffix
+MIDDLE_YAML_SERVICE="middle-app-service.yaml"
 SERVER_YAML_IN="server-app-deployment.yaml.in"
 SERVER_YAML_OUT=${SERVER_YAML_IN%".in"}    # Drop .in suffix
 SERVER_YAML_SERVICE="server-app-service.yaml"
@@ -286,6 +291,7 @@ generate_yaml() {
   echo "Generating deployment YAMLs.."
   export REG_ADDR
   envsubst '{$REG_ADDR}' < "${CLIENT_YAML_IN}" > "${CLIENT_YAML_OUT}"
+  envsubst '{$REG_ADDR}' < "${MIDDLE_YAML_IN}" > "${MIDDLE_YAML_OUT}"
   envsubst '{$REG_ADDR}' < "${SERVER_YAML_IN}" > "${SERVER_YAML_OUT}"
 }
 
@@ -308,6 +314,8 @@ stop_demo_pods() {
   set -x
   del_service server-app
   del_deployment server-app
+  del_service middle-app
+  del_deployment middle-app
   del_deployment client-app
   stop_istio
 
@@ -364,6 +372,8 @@ run_demo_pods() {
   run_istio
   apply_yaml ${SERVER_YAML_OUT}
   apply_yaml ${SERVER_YAML_SERVICE}
+  apply_yaml ${MIDDLE_YAML_OUT}
+  apply_yaml ${MIDDLE_YAML_SERVICE}
   apply_yaml ${CLIENT_YAML_OUT}
 }
 

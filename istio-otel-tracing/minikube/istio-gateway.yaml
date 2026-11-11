@@ -28,6 +28,6 @@ spec:
             prefix: /
       route:
         - destination:
-            host: server-app
+            host: middle-app
             port:
               number: 8080

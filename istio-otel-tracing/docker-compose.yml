@@ -8,7 +8,25 @@ services:
       - istiomesh
     environment:
       - INSTANA_SPANBATCHING_ENABLED=false
+      - INSTANA_AGENT_HOST=instana-agent
+      - INSTANA_AGENT_PORT=42699
+      - target_url=http://middle-app:8080/
+
+  middle-app:
+    build:
+      context: ./middle-app
+    networks:
+      istiomesh:
+        aliases:
+          - middle-app
+    environment:
+      - INSTANA_SPANBATCHING_ENABLED=false
+      - INSTANA_AGENT_HOST=instana-agent
+      - INSTANA_AGENT_PORT=42699
+      - SERVER_PORT=8080
       - target_url=http://server-app:8080/
+    expose:
+      - "8080"
 
   server-app:
     build:

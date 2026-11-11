@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    kompose.cmd: kompose convert
+    kompose.version: 1.26.0 (40646f47)
+  creationTimestamp: null
+  labels:
+    io.kompose.service: middle-app
+  name: middle-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.kompose.service: middle-app
+  strategy: {}
+  template:
+    metadata:
+      annotations:
+        kompose.cmd: kompose convert
+        kompose.version: 1.26.0 (40646f47)
+      creationTimestamp: null
+      labels:
+        io.kompose.network/istiomesh: "true"
+        io.kompose.service: middle-app
+    spec:
+      containers:
+        - env:
+            - name: SERVER_PORT
+              value: "8080"
+            - name: target_url
+              value: http://server-app:8080/
+          image: ${REG_ADDR}/istio-otel-tracing-middle-app
+          imagePullPolicy: Always
+          name: middle-app
+          ports:
+            - containerPort: 8080
+          resources: {}
+      restartPolicy: Always
+status: {}
