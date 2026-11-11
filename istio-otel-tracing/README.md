@@ -69,3 +69,14 @@ See: [minikube/README.md](./minikube/README.md)
 This is how this is looking in the Analyze View on Instana UI:
 
 ![Analyze View istio](images/istio-analyze.png)
+
+Together with a `middle-app` service this looks like this:
+
+![Analyze View with middle-app](images/istio-demo-with-middle-app.png)
+
+The issue here is that the Istio sidecars do not have the required Envoy filter.
+It has to filter the same headers `X-INSTANA-T/S` and `tracestate` as for the Ingress gateway.
+
+This is how this looks with the Istio sidecar Envoy filter added:
+
+![Analyze View with middle-app and Envoy filter](images/istio-demo-with-middle-app-with-filter.png)
