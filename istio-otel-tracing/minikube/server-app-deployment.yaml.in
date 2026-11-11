@@ -23,6 +23,7 @@ spec:
       labels:
         io.kompose.network/istiomesh: "true"
         io.kompose.service: server-app
+        istio-envoy-filter-required: "true"
     spec:
       containers:
         - env:

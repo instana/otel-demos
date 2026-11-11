@@ -1,0 +1,19 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: drop-instana-headers-sidecar
+spec:
+  workloadSelector:
+    labels:
+      istio-envoy-filter-required: "true"
+  configPatches:
+    - applyTo: VIRTUAL_HOST
+      match:
+        context: SIDECAR_INBOUND
+      patch:
+        operation: MERGE
+        value:
+          request_headers_to_remove:
+            - "x-instana-t"
+            - "x-instana-s"
+            - "tracestate"

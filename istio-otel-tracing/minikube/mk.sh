@@ -286,6 +286,7 @@ ISTIO_OPERATOR_YAML="istio-operator.yaml"
 ISTIO_GATEWAY_YAML="istio-gateway.yaml"
 ISTIO_TELEMETRY_YAML="istio-telemetry.yaml"
 ISTIO_ENVOYFILTER_YAML="istio-envoyfilter.yaml"
+ISTIO_SIDECAR_ENVOYFILTER_YAML="istio-sidecar-envoyfilter.yaml"
 
 generate_yaml() {
   echo "Generating deployment YAMLs.."
@@ -332,7 +333,12 @@ stop_demo_pods() {
 }
 
 apply_yaml() {
-  kubectl -n ${NAMESPACE} apply -f "$1"
+  local ns=${NAMESPACE}
+  if [ -n "$2" ]; then
+    ns="$2"
+  fi
+
+  kubectl -n ${ns} apply -f "$1"
 }
 
 create_namespace() {
@@ -348,15 +354,18 @@ run_istio() {
   kubectl label namespace "${NAMESPACE}" istio-injection=enabled --overwrite
 
   # Apply the Gateway + VirtualService (namespace-scoped to NAMESPACE)
-  kubectl -n "${NAMESPACE}" apply -f "${ISTIO_GATEWAY_YAML}"
+  apply_yaml "${ISTIO_GATEWAY_YAML}"
 
   # Apply the Telemetry resource (cluster-wide in istio-system)
-  kubectl apply -f "${ISTIO_TELEMETRY_YAML}"
+  apply_yaml "${ISTIO_TELEMETRY_YAML}" istio-system
 
   # Apply the EnvoyFilter that strips Instana proprietary trace headers from
   # requests entering the ingressgateway so that only the Envoy-generated
-  # W3C traceparent reaches the server-app (making the gateway span visible).
-  kubectl -n istio-system apply -f "${ISTIO_ENVOYFILTER_YAML}"
+  # W3C traceparent reaches the middle-app (making the gateway span visible).
+  apply_yaml "${ISTIO_ENVOYFILTER_YAML}" istio-system
+
+  # Apply the sidecar EnvoyFilter to strip Instana headers for middle-app and server-app
+  apply_yaml "${ISTIO_SIDECAR_ENVOYFILTER_YAML}"
 
   # Wait for the ingressgateway pod to become Ready
   echo "Waiting for istio-ingressgateway to become Ready.."
